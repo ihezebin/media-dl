@@ -1,0 +1,30 @@
+# Binaries / build output
+/media-dl
+*.exe
+*.test
+*.out
+
+# Downloads / local
+/downloads/
+*.mp4
+*.mkv
+*.flv
+*.m4s
+*.part
+*.tmp
+*.jpg
+*.png
+
+# IDE / OS
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# Cookies / secrets
+cookies.txt
+*.cookies
+.env
+
+# Go
+/vendor/
