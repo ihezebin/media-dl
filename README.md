@@ -7,17 +7,25 @@
 本机（当前系统 / 架构）：
 
 ```bash
-go build -o media-dl ./cmd/media-dl
+go build -o media-dl .
 ```
+
+安装到本机全局（写入 `$GOPATH/bin`，需确保该目录已在 `PATH` 中；二进制名取自模块路径最后一段 `media-dl`）：
+
+```bash
+go install .
+```
+
+之后可在任意目录直接使用 `media-dl`；代码更新后重新执行一次即可。
 
 交叉编译 Linux（纯 Go，无需本机交叉工具链；`CGO_ENABLED=0` 保证静态链接）：
 
 ```bash
 # amd64（常见 x86_64 服务器 / 云主机）
-CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o ./dist/media-dl-linux-amd64 ./cmd
+CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o ./dist/media-dl-linux-amd64 .
 
 # arm64（ARM 服务器、树莓派 64 位、Apple Silicon 上的 Linux 等）
-CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -o ./dist/media-dl-linux-arm64 ./cmd
+CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -o ./dist/media-dl-linux-arm64 .
 ```
 
 依赖：Go 1.22+。B 站若只有 DASH 分离流，合并时需要本机已安装 `ffmpeg`。
