@@ -197,8 +197,8 @@ B 站出现 **412**、小红书笔记页打不开时，把浏览器里已能正�
 4. 调用时带上文件：
 
 ```bash
-./media-dl info bilibili "https://www.bilibili.com/video/BVxxxx" --cookies cookies.txt
-./media-dl dl xhs "笔记链接" --cookies cookies.txt
+./media-dl info bilibili "https://www.bilibili.com/video/BV1hRNe6wEzV/?share_source=copy_web&vd_source=db31d99c9cc84c67d33c33e7f08c6620" --cookies cookies.txt
+./media-dl dl xhs "https://www.xiaohongshu.com/discovery/item/69cf80a20000000022000021?source=webshare&xhsshare=pc_web&xsec_token=ABbwDEgcsNgIRc4tGTKqM9obxwVvdF7AlSh5GHvhaSIhY=&xsec_source=pc_share" --cookies cookies.txt
 ```
 
 也可用浏览器开发者工具复制整段 Cookie 头：
