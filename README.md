@@ -224,9 +224,10 @@ B 站出现 **412**、小红书笔记页打不开时，把浏览器里已能正�
 ### 抖音
 
 - 短链 `v.douyin.com` 跟随重定向取 `aweme_id`
-- 优先走 `iesdouyin.com/share/video` SSR（`_ROUTER_DATA`），避免 Web 端 X-Bogus
+- 优先尝试 `iesdouyin.com/share/video` SSR（`_ROUTER_DATA`）；若平台已去掉内嵌视频数据，则回退到 Web `aweme/detail` + `a_bogus`（自动注册 `ttwid`）
 - 播放地址 `playwm` → `play` 尽量无水印
 - 可提取封面 `origin_cover` / `cover`
+- 若 detail 仍为空，可用浏览器导出 Cookie：`--cookies cookies.txt`
 
 ### 哔哩哔哩
 

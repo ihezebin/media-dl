@@ -1,8 +1,11 @@
 package douyin
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
 	"net/url"
 	"regexp"
 	"strings"
@@ -95,17 +98,26 @@ func resolveAwemeID(client *httpx.Client, rawURL string) (string, error) {
 }
 
 func fetchDetail(client *httpx.Client, awemeID string) (map[string]any, error) {
-	// 1) iesdouyin 分享页 SSR（无需 X-Bogus）
+	var errs []string
+	// 1) iesdouyin 分享页 SSR（旧路径；2026-08 起常不再内嵌 videoInfoRes）
 	if item, err := fetchDetailSharePage(client, awemeID); err == nil {
 		return item, nil
 	} else {
-		shareErr := err
-		// 2) 尝试 douyin.com 视频页 RENDER_DATA
-		if item, err := fetchDetailWebPage(client, awemeID); err == nil {
-			return item, nil
-		}
-		return nil, shareErr
+		errs = append(errs, err.Error())
 	}
+	// 2) douyin.com 视频页 RENDER_DATA
+	if item, err := fetchDetailWebPage(client, awemeID); err == nil {
+		return item, nil
+	} else {
+		errs = append(errs, err.Error())
+	}
+	// 3) Web detail API + a_bogus（分享页去 SSR 后的主路径）
+	if item, err := fetchDetailWebAPI(client, awemeID); err == nil {
+		return item, nil
+	} else {
+		errs = append(errs, err.Error())
+	}
+	return nil, fmt.Errorf("%s", strings.Join(errs, "; "))
 }
 
 func fetchDetailSharePage(client *httpx.Client, awemeID string) (map[string]any, error) {
@@ -149,7 +161,88 @@ func fetchDetailSharePage(client *httpx.Client, awemeID string) (map[string]any,
 	if item := findAwemeItem(data); item != nil {
 		return item, nil
 	}
-	return nil, fmt.Errorf("视频数据为空 (海外 IP 可能被拦截，可尝试 --proxy): %s", awemeID)
+	return nil, fmt.Errorf("分享页 SSR 无视频字段 (平台已改为客户端拉取): %s", awemeID)
+}
+
+func ensureTTWid(client *httpx.Client) error {
+	u, _ := url.Parse("https://www.douyin.com/")
+	for _, c := range client.HTTP().Jar.Cookies(u) {
+		if c.Name == "ttwid" && c.Value != "" {
+			return nil
+		}
+	}
+	const payload = `{"region":"cn","aid":1768,"needFid":false,"service":"www.ixigua.com","migrate_info":{"ticket":"","source":"node"},"cbUrlProtocol":"https","union":true}`
+	req, err := http.NewRequest(http.MethodPost, "https://ttwid.bytedance.com/ttwid/union/register/", bytes.NewBufferString(payload))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("User-Agent", webAPIUA)
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("注册 ttwid 失败: %w", err)
+	}
+	defer resp.Body.Close()
+	io.Copy(io.Discard, resp.Body)
+
+	ttwid := ""
+	for _, c := range resp.Cookies() {
+		if c.Name == "ttwid" {
+			ttwid = c.Value
+			break
+		}
+	}
+	if ttwid == "" {
+		return fmt.Errorf("未拿到 ttwid")
+	}
+	// 写入 douyin / iesdouyin，供后续 API 使用
+	for _, host := range []string{"www.douyin.com", "www.iesdouyin.com"} {
+		hu, _ := url.Parse("https://" + host + "/")
+		client.HTTP().Jar.SetCookies(hu, []*http.Cookie{{
+			Name:   "ttwid",
+			Value:  ttwid,
+			Path:   "/",
+			Domain: strings.TrimPrefix(host, "www."),
+		}})
+	}
+	return nil
+}
+
+func fetchDetailWebAPI(client *httpx.Client, awemeID string) (map[string]any, error) {
+	if err := ensureTTWid(client); err != nil {
+		return nil, err
+	}
+	params := defaultWebParams(awemeID)
+	query := encodeWebParams(params)
+	aBogus := generateABogus(query)
+	apiURL := "https://www.douyin.com/aweme/v1/web/aweme/detail/?" + query + "&a_bogus=" + url.QueryEscape(aBogus)
+
+	headers := map[string]string{
+		"User-Agent": webAPIUA,
+		"Referer":    "https://www.douyin.com/",
+		"Accept":     "application/json, text/plain, */*",
+	}
+	body, resp, err := client.GetString(apiURL, headers)
+	if err != nil {
+		return nil, fmt.Errorf("web detail 请求失败: %w", err)
+	}
+	if resp.StatusCode >= 400 {
+		return nil, fmt.Errorf("web detail HTTP %d", resp.StatusCode)
+	}
+	if strings.TrimSpace(body) == "" {
+		return nil, fmt.Errorf("web detail 返回空 (可尝试 --cookies 导入浏览器 Cookie): %s", awemeID)
+	}
+	var data map[string]any
+	if err := json.Unmarshal([]byte(body), &data); err != nil {
+		return nil, fmt.Errorf("web detail JSON 解析失败: %w", err)
+	}
+	if detail, ok := data["aweme_detail"].(map[string]any); ok && detail != nil {
+		return detail, nil
+	}
+	if code, ok := data["status_code"]; ok {
+		return nil, fmt.Errorf("web detail status_code=%v msg=%v", code, data["status_msg"])
+	}
+	return nil, fmt.Errorf("web detail 无 aweme_detail: %s", awemeID)
 }
 
 func fetchDetailWebPage(client *httpx.Client, awemeID string) (map[string]any, error) {
