@@ -29,6 +29,7 @@ var (
 
 func main() {
 	root := &cobra.Command{
+		Version:       "1.0.0",
 		Use:           "media-dl",
 		Short:         "解析并下载抖音 / 哔哩哔哩 / 小红书视频",
 		SilenceUsage:  true,
