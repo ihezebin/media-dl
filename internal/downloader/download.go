@@ -58,10 +58,22 @@ func Download(client *httpx.Client, info *model.VideoInfo, opt Options) (*Result
 	out := &Result{}
 	videoPath := filepath.Join(opt.OutputDir, base+"."+opt.Format)
 
-	// DASH 分离流：AudioURL 非空时需 ffmpeg 合并
-	needMerge := fmtSel.AudioURL != ""
-
-	if needMerge {
+	switch {
+	case isHLS(fmtSel):
+		if !opt.Quiet {
+			fmt.Fprintf(os.Stderr, "HLS 下载 -> %s (需要 ffmpeg)\n", videoPath)
+		}
+		if err := downloadHLS(fmtSel.URL, videoPath, fmtSel.Headers, opt.Format); err != nil {
+			return nil, err
+		}
+	case len(fmtSel.PartURLs) > 1:
+		if !opt.Quiet {
+			fmt.Fprintf(os.Stderr, "分段下载 (%d 段) -> %s\n", len(fmtSel.PartURLs), videoPath)
+		}
+		if err := downloadParts(client, fmtSel.PartURLs, videoPath, fmtSel.Headers, opt.Format, opt.Quiet); err != nil {
+			return nil, err
+		}
+	case fmtSel.AudioURL != "":
 		tmpVideo := filepath.Join(opt.OutputDir, base+".video.tmp")
 		tmpAudio := filepath.Join(opt.OutputDir, base+".audio.tmp")
 		defer os.Remove(tmpVideo)
@@ -85,7 +97,7 @@ func Download(client *httpx.Client, info *model.VideoInfo, opt Options) (*Result
 		if err := mergeAV(tmpVideo, tmpAudio, videoPath, opt.Format); err != nil {
 			return nil, err
 		}
-	} else {
+	default:
 		if !opt.Quiet {
 			fmt.Fprintf(os.Stderr, "下载中 -> %s\n", videoPath)
 		}
@@ -131,6 +143,121 @@ func Download(client *httpx.Client, info *model.VideoInfo, opt Options) (*Result
 		}
 	}
 	return out, nil
+}
+
+func isHLS(f *model.Format) bool {
+	if f == nil {
+		return false
+	}
+	if strings.EqualFold(f.Protocol, "m3u8") || strings.EqualFold(f.Ext, "m3u8") {
+		return true
+	}
+	u := strings.ToLower(f.URL)
+	return strings.Contains(u, ".m3u8")
+}
+
+func downloadHLS(src, out string, headers map[string]string, format string) error {
+	if _, err := exec.LookPath("ffmpeg"); err != nil {
+		return fmt.Errorf("该清晰度为 HLS (m3u8)，需要系统安装 ffmpeg 才能下载")
+	}
+	args := []string{"-y"}
+	if ua := headers["User-Agent"]; ua != "" {
+		args = append(args, "-user_agent", ua)
+	}
+	if ref := headers["Referer"]; ref != "" {
+		args = append(args, "-referer", ref)
+	}
+	var extra []string
+	for k, v := range headers {
+		if k == "User-Agent" || k == "Referer" {
+			continue
+		}
+		extra = append(extra, k+": "+v)
+	}
+	if len(extra) > 0 {
+		args = append(args, "-headers", strings.Join(extra, "\r\n")+"\r\n")
+	}
+	args = append(args, "-i", src, "-c", "copy")
+	if format == "mp4" || format == "m4v" {
+		args = append(args, "-bsf:a", "aac_adtstoasc", "-movflags", "+faststart")
+	}
+	args = append(args, out)
+	cmd := exec.Command("ffmpeg", args...)
+	cmd.Stdout = io.Discard
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("ffmpeg 下载 HLS 失败: %w", err)
+	}
+	return nil
+}
+
+func downloadParts(client *httpx.Client, urls []string, out string, headers map[string]string, format string, quiet bool) error {
+	if len(urls) == 0 {
+		return fmt.Errorf("没有分段地址")
+	}
+	if len(urls) == 1 {
+		tmp := out + ".part"
+		if err := saveURL(client, urls[0], tmp, headers); err != nil {
+			return err
+		}
+		if err := remux(tmp, out, format); err != nil {
+			return os.Rename(tmp, out)
+		}
+		_ = os.Remove(tmp)
+		return nil
+	}
+	dir := filepath.Dir(out)
+	base := filepath.Base(out)
+	parts := make([]string, 0, len(urls))
+	defer func() {
+		for _, p := range parts {
+			_ = os.Remove(p)
+		}
+	}()
+	for i, u := range urls {
+		p := filepath.Join(dir, fmt.Sprintf("%s.part%d", base, i+1))
+		if !quiet {
+			fmt.Fprintf(os.Stderr, "  段 %d/%d\n", i+1, len(urls))
+		}
+		if err := saveURL(client, u, p, headers); err != nil {
+			return fmt.Errorf("下载第 %d 段失败: %w", i+1, err)
+		}
+		parts = append(parts, p)
+	}
+	return concatParts(parts, out, format)
+}
+
+func concatParts(parts []string, out, format string) error {
+	if _, err := exec.LookPath("ffmpeg"); err != nil {
+		return fmt.Errorf("多段视频需要系统安装 ffmpeg 才能合并")
+	}
+	listPath := out + ".concat.txt"
+	var b strings.Builder
+	for _, p := range parts {
+		abs, err := filepath.Abs(p)
+		if err != nil {
+			abs = p
+		}
+		escaped := strings.ReplaceAll(abs, `'`, `'\''`)
+		fmt.Fprintf(&b, "file '%s'\n", escaped)
+	}
+	if err := os.WriteFile(listPath, []byte(b.String()), 0o644); err != nil {
+		return err
+	}
+	defer os.Remove(listPath)
+
+	args := []string{"-y", "-f", "concat", "-safe", "0", "-i", listPath, "-c", "copy"}
+	if format == "mp4" || format == "m4v" {
+		args = append(args, "-movflags", "+faststart")
+	}
+	args = append(args, out)
+	cmd := exec.Command("ffmpeg", args...)
+	cmd.Stdout = io.Discard
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("ffmpeg 合并分段失败: %w", err)
+	}
+	return nil
 }
 
 func saveURL(client *httpx.Client, rawURL, path string, headers map[string]string) error {

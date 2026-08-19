@@ -4,6 +4,8 @@ import "encoding/json"
 
 // VideoInfo 统一的视频元信息，供 info / download 共用。
 type VideoInfo struct {
+	Success     bool     `json:"success"`
+	ErrMsg      string   `json:"err_msg,omitempty"` // 仅失败时出现
 	Platform    string   `json:"platform"`
 	ID          string   `json:"id"`
 	Title       string   `json:"title"`
@@ -33,15 +35,40 @@ type Format struct {
 	AudioURL   string            `json:"audio_url"` // DASH 分离音轨；空表示一体流
 	Headers    map[string]string `json:"-"`
 	Preference int               `json:"-"`
+	Protocol   string            `json:"-"` // "m3u8" 表示 HLS，下载需 ffmpeg
+	PartURLs   []string          `json:"-"` // 多段 URL，下载后拼接
 }
 
-// Normalize 补齐统一字段（空切片、优选 video_url）。
+// Normalize 补齐统一字段（空切片、优选 video_url、success）。
 func (v *VideoInfo) Normalize() {
 	if v.Formats == nil {
 		v.Formats = []Format{}
 	}
+	if v.ErrMsg != "" {
+		v.Success = false
+		return
+	}
+	v.Success = true
 	if best := v.BestFormat(); best != nil {
 		v.VideoURL = best.URL
+	}
+}
+
+// Fail 构造解析失败时的 JSON 对象（含具体原因）。
+func Fail(platform, webpageURL string, err error) *VideoInfo {
+	msg := ""
+	if err != nil {
+		msg = err.Error()
+	}
+	if msg == "" {
+		msg = "未知错误"
+	}
+	return &VideoInfo{
+		Success:    false,
+		ErrMsg:     msg,
+		Platform:   platform,
+		WebpageURL: webpageURL,
+		Formats:    []Format{},
 	}
 }
 

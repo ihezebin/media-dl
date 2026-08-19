@@ -1,6 +1,7 @@
 package httpx
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -115,6 +116,45 @@ func (c *Client) GetBytes(rawURL string, headers map[string]string) ([]byte, *ht
 func (c *Client) GetString(rawURL string, headers map[string]string) (string, *http.Response, error) {
 	b, resp, err := c.GetBytes(rawURL, headers)
 	return string(b), resp, err
+}
+
+func (c *Client) Post(rawURL, contentType string, body []byte, headers map[string]string) (*http.Response, error) {
+	req, err := http.NewRequest(http.MethodPost, rawURL, bytes.NewReader(body))
+	if err != nil {
+		return nil, err
+	}
+	req.GetBody = func() (io.ReadCloser, error) {
+		return io.NopCloser(bytes.NewReader(body)), nil
+	}
+	if contentType != "" {
+		req.Header.Set("Content-Type", contentType)
+	}
+	for k, v := range headers {
+		req.Header.Set(k, v)
+	}
+	return c.Do(req)
+}
+
+func (c *Client) PostBytes(rawURL, contentType string, body []byte, headers map[string]string) ([]byte, *http.Response, error) {
+	resp, err := c.Post(rawURL, contentType, body, headers)
+	if err != nil {
+		return nil, nil, err
+	}
+	defer resp.Body.Close()
+	b, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, resp, err
+	}
+	return b, resp, nil
+}
+
+func (c *Client) PostString(rawURL, contentType string, body []byte, headers map[string]string) (string, *http.Response, error) {
+	b, resp, err := c.PostBytes(rawURL, contentType, body, headers)
+	return string(b), resp, err
+}
+
+func (c *Client) PostForm(rawURL string, form url.Values, headers map[string]string) ([]byte, *http.Response, error) {
+	return c.PostBytes(rawURL, "application/x-www-form-urlencoded", []byte(form.Encode()), headers)
 }
 
 // ResolveRedirect 跟随短链重定向，返回最终 URL。

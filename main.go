@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -14,7 +15,12 @@ import (
 
 	_ "github.com/hezebin/media-dl/internal/extractor/bilibili"
 	_ "github.com/hezebin/media-dl/internal/extractor/douyin"
+	_ "github.com/hezebin/media-dl/internal/extractor/iqiyi"
+	_ "github.com/hezebin/media-dl/internal/extractor/tencent"
+	_ "github.com/hezebin/media-dl/internal/extractor/weibo"
 	_ "github.com/hezebin/media-dl/internal/extractor/xiaohongshu"
+	_ "github.com/hezebin/media-dl/internal/extractor/xigua"
+	_ "github.com/hezebin/media-dl/internal/extractor/youku"
 )
 
 var (
@@ -31,22 +37,23 @@ func main() {
 	root := &cobra.Command{
 		Version:       "1.0.0",
 		Use:           "media-dl",
-		Short:         "解析并下载抖音 / 哔哩哔哩 / 小红书视频",
+		Short:         "解析并下载多平台视频",
 		SilenceUsage:  true,
 		SilenceErrors: true,
 		Long: `media-dl 从分享链接（含短链）解析视频信息并下载。
 
-必须显式指定平台: douyin | bilibili | xiaohongshu
-（别名: dy / bili / xhs）
+必须显式指定平台: douyin | bilibili | xiaohongshu | weibo | youku | iqiyi | xigua | tencent
+（别名: dy / bili / xhs / wb / yk / iq / 西瓜 / qq）
 
 示例:
   media-dl info douyin "https://v.douyin.com/xxx"
   media-dl download bilibili "https://www.bilibili.com/video/BVxxx" -f mp4
-  media-dl dl xhs "https://www.xiaohongshu.com/explore/xxx" --cover`,
+  media-dl dl xhs "https://www.xiaohongshu.com/explore/xxx" --cover
+  media-dl info tencent "https://v.qq.com/x/page/xxx.html"`,
 	}
 
 	root.PersistentFlags().StringVar(&flagProxy, "proxy", "", "HTTP/HTTPS 代理，如 http://127.0.0.1:7890")
-	root.PersistentFlags().StringVar(&flagCookies, "cookies", "", "Netscape cookies.txt 路径（B 站 412 / 小红书风控时建议）")
+	root.PersistentFlags().StringVar(&flagCookies, "cookies", "", "Netscape cookies.txt 路径（B 站 412 / 小红书 / 西瓜 / 腾讯 VIP 等建议）")
 	root.PersistentFlags().StringVar(&flagCookie, "cookie", "", "直接传入 Cookie 头字符串")
 
 	infoCmd := &cobra.Command{
@@ -70,10 +77,19 @@ func main() {
 
 	root.AddCommand(infoCmd, dlCmd)
 	if err := root.Execute(); err != nil {
-		fmt.Fprintln(os.Stderr, "Error:", err)
+		var printed jsonPrintedError
+		if !errors.As(err, &printed) {
+			fmt.Fprintln(os.Stderr, "Error:", err)
+		}
 		os.Exit(1)
 	}
 }
+
+// jsonPrintedError 表示失败 JSON 已写到 stdout，无需再往 stderr 打 Error:。
+type jsonPrintedError struct{ err error }
+
+func (e jsonPrintedError) Error() string { return e.err.Error() }
+func (e jsonPrintedError) Unwrap() error { return e.err }
 
 func newClient() (*httpx.Client, error) {
 	var cookies []*http.Cookie
@@ -85,7 +101,11 @@ func newClient() (*httpx.Client, error) {
 		cookies = append(cookies, cs...)
 	}
 	if flagCookie != "" {
-		for _, domain := range []string{"douyin.com", "bilibili.com", "xiaohongshu.com"} {
+		for _, domain := range []string{
+			"douyin.com", "bilibili.com", "xiaohongshu.com",
+			"weibo.com", "weibo.cn", "youku.com", "tudou.com",
+			"iqiyi.com", "iq.com", "ixigua.com", "toutiao.com", "qq.com",
+		} {
 			cookies = append(cookies, httpx.ParseCookieHeader(flagCookie, domain)...)
 		}
 	}
@@ -97,19 +117,35 @@ func newClient() (*httpx.Client, error) {
 
 func runInfo(_ *cobra.Command, args []string) error {
 	platform, rawURL := args[0], args[1]
+	canon, _ := extractor.NormalizePlatform(platform)
+	if canon == "" {
+		canon = platform
+	}
+	printJSON := func(info *model.VideoInfo) error {
+		b, err := info.MarshalInfo()
+		if err != nil {
+			return err
+		}
+		fmt.Println(string(b))
+		return nil
+	}
 	client, err := newClient()
 	if err != nil {
-		return err
+		if perr := printJSON(model.Fail(canon, rawURL, err)); perr != nil {
+			return perr
+		}
+		return jsonPrintedError{err}
 	}
 	info, err := extractor.Extract(client, platform, rawURL)
 	if err != nil {
+		if perr := printJSON(model.Fail(canon, rawURL, err)); perr != nil {
+			return perr
+		}
+		return jsonPrintedError{err}
+	}
+	if err := printJSON(info); err != nil {
 		return err
 	}
-	b, err := info.MarshalInfo()
-	if err != nil {
-		return err
-	}
-	fmt.Println(string(b))
 	return nil
 }
 
