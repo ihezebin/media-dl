@@ -132,35 +132,83 @@ func randLetters(n int) string {
 	return string(b)
 }
 
+// fetchCNA 获取 UPS 所需的 utid（cna）。
+// mmstat eg.js 偶发 EOF/超时；此处用短超时单次请求，失败即回退默认值（与 you-get 一致），不阻断解析。
 func fetchCNA(client *httpx.Client) (string, error) {
-	u, _ := url.Parse("https://v.youku.com/")
-	for _, c := range client.HTTP().Jar.Cookies(u) {
-		if c.Name == "cna" && c.Value != "" {
-			return c.Value, nil
+	const fallback = "DOG4EdW4qzsCAbZyXbU+t7Jt"
+	if cna := cookieValue(client, "https://v.youku.com/", "cna"); cna != "" {
+		return cna, nil
+	}
+	if cna := cookieValue(client, "https://log.mmstat.com/", "cna"); cna != "" {
+		return cna, nil
+	}
+
+	probe := &http.Client{
+		Timeout:   5 * time.Second,
+		Jar:       client.HTTP().Jar,
+		Transport: client.HTTP().Transport,
+	}
+	for _, api := range []string{
+		"https://log.mmstat.com/eg.js",
+		"http://log.mmstat.com/eg.js",
+	} {
+		req, err := http.NewRequest(http.MethodGet, api, nil)
+		if err != nil {
+			continue
+		}
+		req.Header.Set("User-Agent", httpx.DefaultUA)
+		req.Header.Set("Referer", "https://v.youku.com/")
+		resp, err := probe.Do(req)
+		if err != nil {
+			continue
+		}
+		cna := cnaFromResponse(resp)
+		_ = resp.Body.Close()
+		if cna == "" {
+			cna = cookieValue(client, "https://log.mmstat.com/", "cna")
+		}
+		if cna != "" {
+			setYoukuCNA(client, cna)
+			return cna, nil
 		}
 	}
-	resp, err := client.Get("https://log.mmstat.com/eg.js", map[string]string{
-		"Referer": "https://v.youku.com/",
-	})
-	if err != nil {
-		return "", fmt.Errorf("获取 cna 失败: %w", err)
+	setYoukuCNA(client, fallback)
+	return fallback, nil
+}
+
+func cookieValue(client *httpx.Client, rawURL, name string) string {
+	u, err := url.Parse(rawURL)
+	if err != nil || client.HTTP().Jar == nil {
+		return ""
 	}
-	defer resp.Body.Close()
+	for _, c := range client.HTTP().Jar.Cookies(u) {
+		if c.Name == name && c.Value != "" {
+			return c.Value
+		}
+	}
+	return ""
+}
+
+func cnaFromResponse(resp *http.Response) string {
 	if etag := strings.Trim(resp.Header.Get("ETag"), `"`); etag != "" {
-		return etag, nil
+		return etag
 	}
 	for _, c := range resp.Cookies() {
 		if c.Name == "cna" && c.Value != "" {
-			return c.Value, nil
+			return c.Value
 		}
 	}
-	mm, _ := url.Parse("https://log.mmstat.com/")
-	for _, c := range client.HTTP().Jar.Cookies(mm) {
-		if c.Name == "cna" && c.Value != "" {
-			return c.Value, nil
-		}
+	return ""
+}
+
+func setYoukuCNA(client *httpx.Client, cna string) {
+	if client.HTTP().Jar == nil || cna == "" {
+		return
 	}
-	return "DOG4EdW4qzsCAbZyXbU+t7Jt", nil
+	u, _ := url.Parse("https://v.youku.com/")
+	client.HTTP().Jar.SetCookies(u, []*http.Cookie{
+		{Name: "cna", Value: cna, Domain: ".youku.com", Path: "/"},
+	})
 }
 
 func fetchUPS(client *httpx.Client, vid, cna, ccode, ckey string, headers map[string]string) (map[string]any, error) {
