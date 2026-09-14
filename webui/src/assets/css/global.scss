@@ -1,0 +1,64 @@
+@use "theme" as *;
+
+html, body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  min-width: 320px;
+  overflow: hidden;
+  overscroll-behavior: none;
+  background-color: var(--background-color);
+  font-size: var(--font-size);
+
+  color: var(--text-color);
+  z-index: 0;
+
+  * {
+    font-family: var(--font-family) !important;
+    box-sizing: border-box;
+  }
+
+}
+
+#root,
+#root * {
+  scrollbar-color: var(--scrollbar-color) transparent;
+  scrollbar-width: thin;
+}
+
+html::-webkit-scrollbar,
+body::-webkit-scrollbar,
+#root::-webkit-scrollbar,
+#root *::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+html::-webkit-scrollbar-track,
+body::-webkit-scrollbar-track,
+#root::-webkit-scrollbar-track,
+#root *::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+html::-webkit-scrollbar-thumb,
+body::-webkit-scrollbar-thumb,
+#root::-webkit-scrollbar-thumb,
+#root *::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 8px;
+  background-color: var(--scrollbar-color);
+  background-clip: padding-box;
+}
+
+html::-webkit-scrollbar-thumb:hover,
+body::-webkit-scrollbar-thumb:hover,
+#root::-webkit-scrollbar-thumb:hover,
+#root *::-webkit-scrollbar-thumb:hover {
+  background-color: var(--scrollbar-hover-color);
+}
+
+#root {
+  height: 100%;
+  overflow: hidden;
+}

@@ -10,6 +10,8 @@ func TestNormalizePlatform(t *testing.T) {
 		"网易云音乐":       "netease",
 		"QQ音乐":        "qq",
 		"酷狗":          "kugou",
+		"Jamendo音乐":    "jamendo",
+		"JOOX音乐":       "joox",
 		"Apple Music": "apple",
 	}
 	for input, want := range tests {

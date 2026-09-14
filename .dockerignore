@@ -1,0 +1,9 @@
+.git
+.DS_Store
+.env
+.env.*
+!.env.example
+bin
+downloads
+webui/node_modules
+webui/dist

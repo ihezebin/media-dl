@@ -1,0 +1,160 @@
+@use "variable" as *;
+
+@mixin app-tokens-light {
+  --app-font-family: 'Xiaolai SC', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+  --app-ink: rgba(15, 23, 42, 0.92);
+  --app-muted: rgba(15, 23, 42, 0.55);
+  --app-faint: rgba(15, 23, 42, 0.42);
+  --app-accent: #1677ff;
+  --app-accent-2: #04befe;
+  --app-accent-deep: #6253e1;
+  --app-line: rgb(177 185 203 / 8%);
+  --app-line-strong: rgba(22, 119, 255, 0.28);
+  --app-surface: rgba(255, 255, 255, 0.72);
+  --app-surface-solid: #ffffff;
+  --app-shell-bg: #f4f7fb;
+  --app-sidebar-bg:
+    radial-gradient(120% 70% at 0% 0%, rgba(4, 190, 254, 0.1), transparent 55%),
+    linear-gradient(180deg, #f5f8fc 0%, #eef3f9 100%);
+  --app-soft-bg:
+    radial-gradient(120% 80% at 8% 0%, rgba(4, 190, 254, 0.09), transparent 55%),
+    radial-gradient(90% 70% at 96% 100%, rgba(98, 83, 225, 0.07), transparent 52%),
+    linear-gradient(180deg, #f7f9fc 0%, #ffffff 48%, #f4f7fb 100%);
+  --app-grad-primary: linear-gradient(135deg, #6253e1, #04befe);
+  --app-grad-primary-hover: linear-gradient(135deg, #60a5fa 0%, #3b82f6 50%, #1677ff 100%);
+  --app-grad-bar: linear-gradient(180deg, #6253e1, #1677ff, #04befe);
+  --app-brand-grad: linear-gradient(120deg, #0f172a 10%, #1677ff 70%, #04befe 120%);
+  --app-panel-bg: rgba(255, 255, 255, 0.78);
+  --app-panel-border: rgba(255, 255, 255, 0.85);
+  --app-header-bg: rgba(255, 255, 255, 0.35);
+  /* 默认态：原 hover 的白卡片观感 */
+  --app-nav-bg: rgba(255, 255, 255, 0.92);
+  --app-nav-hover: linear-gradient(
+    135deg,
+    rgba(230, 244, 255, 0.98),
+    rgba(240, 249, 255, 1) 55%,
+    rgba(255, 245, 245, 0.95)
+  );
+  --app-nav-active: linear-gradient(135deg, rgba(98, 83, 225, 0.95), #1677ff 55%, #04befe);
+  --app-item-bg: rgba(255, 255, 255, 0.92);
+  --app-item-active: linear-gradient(135deg, rgba(230, 244, 255, 0.95), rgba(235, 248, 255, 0.98));
+  --app-nav-hover-border: rgba(22, 119, 255, 0.38);
+  --app-nav-hover-shadow:
+    0 6px 18px rgba(22, 119, 255, 0.14),
+    0 0 0 1px rgba(22, 119, 255, 0.08);
+  --app-orb-a: rgba(4, 190, 254, 0.35);
+  --app-orb-b: rgba(22, 119, 255, 0.22);
+  --app-mesh-line: rgba(15, 23, 42, 0.045);
+  --app-inset-highlight: rgba(255, 255, 255, 0.55);
+  --app-shadow-accent: rgba(22, 119, 255, 0.12);
+  --app-btn-fill: linear-gradient(rgba(255, 255, 255, 0.92), rgba(255, 255, 255, 0.92));
+  --app-btn-fill-hover: linear-gradient(rgba(230, 244, 255, 0.98), rgba(240, 249, 255, 1));
+  --app-card-shadow:
+    0 1px 2px rgba(15, 23, 42, 0.03),
+    0 12px 36px rgba(22, 119, 255, 0.06);
+}
+
+@mixin app-tokens-dark {
+  --app-font-family: 'Xiaolai SC', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+  --app-ink: rgba(236, 240, 248, 0.94);
+  --app-muted: rgba(168, 178, 198, 0.68);
+  --app-faint: rgba(130, 140, 162, 0.5);
+  --app-accent: #5b9dff;
+  --app-accent-2: #ff6b6d;
+  --app-accent-deep: #3b82f6;
+  --app-line: rgba(255, 255, 255, 0.07);
+  --app-line-strong: rgba(91, 157, 255, 0.4);
+  --app-surface: rgba(18, 20, 28, 0.9);
+  --app-surface-solid: #12141c;
+  --app-shell-bg: #06070a;
+  /* 侧栏：更深黑底 + 极淡蓝红光，避免发灰发脏 */
+  --app-sidebar-bg:
+    radial-gradient(120% 70% at 0% 0%, rgba(59, 130, 246, 0.09), transparent 55%),
+    radial-gradient(90% 55% at 100% 100%, rgba(255, 77, 79, 0.045), transparent 50%),
+    linear-gradient(180deg, #0c0d12 0%, #08090d 48%, #05060a 100%);
+  --app-soft-bg:
+    radial-gradient(120% 80% at 8% 0%, rgba(59, 130, 246, 0.08), transparent 55%),
+    radial-gradient(90% 70% at 96% 100%, rgba(255, 77, 79, 0.045), transparent 52%),
+    linear-gradient(180deg, #0c0e14 0%, #06070a 48%, #0a0b10 100%);
+  --app-grad-primary: linear-gradient(135deg, #1677ff, #5b9dff 48%, #ff6b6d);
+  --app-grad-primary-hover: linear-gradient(135deg, #69b1ff 0%, #5b9dff 45%, #ff8587 100%);
+  --app-grad-bar: linear-gradient(180deg, #1677ff, #5b9dff, #ff6b6d);
+  --app-brand-grad: linear-gradient(120deg, #eef3ff 8%, #5b9dff 52%, #ff6b6d 120%);
+  --app-panel-bg: rgba(16, 18, 26, 0.92);
+  --app-panel-border: rgba(255, 255, 255, 0.08);
+  --app-header-bg: rgba(8, 9, 14, 0.72);
+  /* 默认菜单：深色玻璃，对比靠 hover/active 提亮 */
+  --app-nav-bg: rgba(255, 255, 255, 0.035);
+  --app-nav-hover: linear-gradient(
+    135deg,
+    rgba(59, 130, 246, 0.18),
+    rgba(255, 255, 255, 0.06) 45%,
+    rgba(255, 77, 79, 0.08)
+  );
+  --app-nav-active: linear-gradient(135deg, #1677ff, #4c8dff 50%, #ff6b6d);
+  --app-item-bg: rgba(255, 255, 255, 0.03);
+  --app-item-active: linear-gradient(
+    135deg,
+    rgba(36, 58, 110, 0.72),
+    rgba(42, 28, 42, 0.55)
+  );
+  --app-nav-hover-border: rgba(91, 157, 255, 0.42);
+  --app-nav-hover-shadow:
+    0 8px 22px rgba(0, 0, 0, 0.35),
+    0 0 0 1px rgba(91, 157, 255, 0.14);
+  --app-orb-a: rgba(59, 130, 246, 0.16);
+  --app-orb-b: rgba(255, 77, 79, 0.08);
+  --app-mesh-line: rgba(255, 255, 255, 0.035);
+  --app-inset-highlight: rgba(255, 255, 255, 0.03);
+  --app-shadow-accent: rgba(59, 130, 246, 0.2);
+  --app-btn-fill: linear-gradient(rgba(22, 24, 34, 0.96), rgba(14, 16, 24, 0.96));
+  --app-btn-fill-hover: linear-gradient(rgba(36, 48, 78, 0.95), rgba(40, 30, 42, 0.92));
+  --app-card-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.45),
+    0 14px 40px rgba(0, 0, 0, 0.28);
+}
+
+@mixin default {
+  @include app-tokens-light;
+
+  --font-family: var(--app-font-family);
+  --font-size: #{$font-size-14};
+  --text-color: var(--app-ink);
+  --background-color: var(--app-shell-bg);
+  --content-background-color: var(--app-surface-solid);
+  --subtitle-color: var(--app-muted);
+  --link-hover-color: var(--app-accent);
+  --link-hover-color-another: #{$link-hover-color-green};
+  --scrollbar-color: #{$scrollbar-color};
+  --scrollbar-hover-color: #{$scrollbar-hover-color};
+  --footer-text-color: var(--app-faint);
+  --btn-disabled-color: rgba(0, 0, 0, 0.25);
+}
+
+@mixin theme-dark {
+  @include app-tokens-dark;
+
+  --font-family: var(--app-font-family);
+  --text-color: var(--app-ink);
+  --background-color: var(--app-shell-bg);
+  --content-background-color: var(--app-surface-solid);
+  --subtitle-color: var(--app-muted);
+  --link-hover-color: var(--app-accent);
+  --scrollbar-color: #{$scrollbar-color-reverse};
+  --scrollbar-hover-color: #{$scrollbar-hover-color-reverse};
+  --footer-text-color: var(--app-faint);
+  --btn-disabled-color: #6e6e6e;
+
+  .ant-btn-disabled,
+  :disabled {
+    color: #6e6e6e;
+  }
+}
+
+html[theme='dark'] {
+  @include theme-dark;
+}
+
+:root {
+  @include default;
+}

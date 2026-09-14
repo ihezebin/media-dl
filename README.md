@@ -30,6 +30,103 @@ CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -o ./dist/media-dl-linux-arm64 .
 
 依赖：Go 1.25.10+。命令行由 [Cobra](https://github.com/spf13/cobra) 提供；音乐平台适配依赖开源项目 [guohuiyuan/music-lib](https://github.com/guohuiyuan/music-lib)。B 站 DASH 分离流、优酷/爱奇艺/腾讯的 HLS 或多段视频，合并时需要本机已安装 `ffmpeg`。
 
+## HTTP API 和 Web UI
+
+除了 CLI，项目还提供 `media-dl server` HTTP 服务。服务端使用开源项目 [olympus/httpserver](https://github.com/ihezebin/olympus) 注册 API 和 OpenAPI 文档，音乐接口继续使用 [guohuiyuan/music-lib](https://github.com/guohuiyuan/music-lib) 的平台实现；构建后的 `webui` 由同一服务托管。
+
+```bash
+go run . server --port 8080 --web-dir ./webui/dist --output ./downloads
+```
+
+服务启动后，Web UI 地址为 `http://127.0.0.1:8080/`，接口文档为 `http://127.0.0.1:8080/openapi`。完整接口、请求体、响应体和环境变量说明见 [HTTP API 文档](./httpserver/README.md)。
+
+## 本地一键部署
+
+如果不使用 Docker，选择本机直接运行方式。需要先构建前端和 Go 服务，再启动服务：
+
+```bash
+make build
+make server
+```
+
+如果使用 Docker Compose，则不需要先执行 `make build` 或 `make server`。直接执行 `make docker-up` 即可；Compose 会在镜像构建过程中自动构建前端和 Go 服务，下载文件会保存在项目根目录的 `downloads/`：
+
+```bash
+make docker-up
+```
+
+`make docker-up` 实际使用 [docker-compose.local.yml](./docker-compose.local.yml)，默认访问 `http://127.0.0.1:8080/`，停止服务执行 `make docker-down`。也可以直接执行：
+
+```bash
+docker compose -f docker-compose.local.yml up --build
+```
+
+可通过 `MEDIA_DL_PORT`、`MEDIA_DL_PROXY`、`MEDIA_DL_COOKIE` 和 `MEDIA_DL_COOKIES` 配置端口、代理与登录态，例如：
+
+```bash
+MEDIA_DL_PORT=8090 MEDIA_DL_PROXY=http://host.docker.internal:7890 make docker-up
+```
+
+## 服务端使用 Docker 镜像 tag 部署
+
+服务端不需要拉取或编译源代码，只运行镜像仓库中的 tag。默认镜像地址为 `ghcr.io/ihezebin/media-dl`，可以通过 `IMAGE_REPOSITORY` 覆盖。镜像内已经包含 Go 后端和编译后的 `webui` 前端，由同一个 `media-dl server` 进程提供服务。
+
+### 1. 使用 `make package` 构建并推送镜像
+
+建议在仓库的 GitHub tag 上执行打包，例如：
+
+```bash
+git checkout v0.1.0
+docker login ghcr.io
+make package
+```
+
+`make package` 会读取当前仓库 tag 作为镜像 tag：
+
+```text
+ghcr.io/ihezebin/media-dl:v0.1.0
+```
+
+它会完成前端构建、后端构建、Docker 镜像构建和推送。当前提交没有 Git tag 时，会使用 Git 提交号作为 tag；生产部署建议使用 GitHub 仓库中已经存在的版本 tag。构建架构默认是 `linux/amd64`，可通过 `DOCKER_PLATFORM` 覆盖。只构建不推送时使用 `make package-local`。
+
+如果不想提前执行 `docker login`，也可以把镜像仓库账号和访问令牌交给 Makefile，由它自动完成登录：
+
+```bash
+DOCKER_USER=<账号> \
+DOCKER_PWD=<访问令牌> \
+make package
+```
+
+### 2. 云服务器直接启动 Compose
+
+将 [docker-compose.yml](./docker-compose.yml) 和一个 `.env` 文件放到云服务器的部署目录；不需要复制项目源代码或 Dockerfile：
+
+```dotenv
+MEDIA_DL_TAG=v0.1.0
+MEDIA_DL_PORT=8080
+MEDIA_DL_PROXY=
+MEDIA_DL_COOKIE=
+MEDIA_DL_COOKIES=
+```
+
+`MEDIA_DL_TAG` 使用 GitHub 仓库中发布的 tag，并且必须与 `make package` 推送的镜像 tag 一致。私有 GHCR 仓库需要先在服务器登录：
+
+```bash
+docker login ghcr.io
+docker compose pull
+docker compose up -d
+docker compose ps
+```
+
+升级时只需把 `.env` 中的 `MEDIA_DL_TAG` 改为新的 GitHub tag，再执行 `docker compose pull && docker compose up -d`。下载文件会持久化在部署目录的 `downloads/`，查看日志或停止服务：
+
+```bash
+docker compose logs -f media-dl
+docker compose down
+```
+
+根目录的 [docker-compose.yml](./docker-compose.yml) 是云服务器的 tag 部署配置；本地源码构建使用 [docker-compose.local.yml](./docker-compose.local.yml)。
+
 ## 总览
 
 视频命令：
@@ -56,18 +153,20 @@ internal/
     downloader/           视频文件下载和 ffmpeg 合并
   httpx/                  视频和音乐共用的 HTTP、Cookie、代理能力
   util/                   视频和音乐共用的文件名等工具
+httpserver/               HTTP API、文件服务和 webui 托管
+webui/                    Vite + React 前端
 ```
 
-## 公共参数（video / music）
+## 公共参数（video / music / server）
 
-以下参数是根命令的持久参数，`video info`、`video download`、`music search`、`music download` 均可使用。它们的参数名相同，但在两个业务域中注入请求的方式略有不同。
+以下参数是根命令的持久参数，`video info`、`video download`、`music search`、`music download`、`server` 均可使用。它们的参数名相同，但在三个命令域中的注入方式略有不同。
 
-| 参数 | 默认值 | video 行为 | music 行为 |
-| --- | --- | --- | --- |
-| `--proxy` | 空 | 通过视频 HTTP 客户端代理解析、下载、封面和 DASH/HLS 请求。 | 配置 `music-lib` 和音乐下载使用的 HTTP transport，影响搜索、歌曲解析、下载、封面和歌词请求。 |
-| `--cookies` | 空 | 读取 Netscape 格式 `cookies.txt`，按 Cookie 的域名和路径规则注入视频请求，用于登录态、VIP、412 和风控场景。 | 读取同一文件，将 Cookie 传入音乐库；音乐页面、音频和封面请求也使用对应 Cookie。 |
-| `--cookie` | 空 | 将直接传入的 `Cookie` 头复制到支持的视频平台域名，用于临时登录态、VIP 或风控调试。 | 将原始 `Cookie` 头传入音乐库和音乐 HTTP 请求；Apple Music 可传 `media-user-token`，也可传音乐库支持的 `token`。 |
-| `-h, --help` | — | 显示当前 video 命令或子命令帮助。 | 显示当前 music 命令或子命令帮助。 |
+| 参数 | 默认值 | video 行为 | music 行为 | server 行为 |
+| --- | --- | --- | --- | --- |
+| `--proxy` | 空 | 通过视频 HTTP 客户端代理解析、下载、封面和 DASH/HLS 请求。 | 配置 `music-lib` 和音乐下载使用的 HTTP transport，影响搜索、歌曲解析、下载、封面和歌词请求。 | 服务启动后，API 请求沿用该代理。 |
+| `--cookies` | 空 | 读取 Netscape 格式 `cookies.txt`，按 Cookie 的域名和路径规则注入视频请求，用于登录态、VIP、412 和风控场景。 | 读取同一文件，将 Cookie 传入音乐库；音乐页面、音频和封面请求也使用对应 Cookie。 | 服务启动时加载文件，后续 video/music API 请求共用。 |
+| `--cookie` | 空 | 将直接传入的 `Cookie` 头复制到支持的视频平台域名，用于临时登录态、VIP 或风控调试。 | 将原始 `Cookie` 头传入音乐库和音乐 HTTP 请求；Apple Music 可传 `media-user-token`，也可传音乐库支持的 `token`。 | 服务启动时保存该值，后续 API 请求共用。 |
+| `-h, --help` | — | 显示当前 video 命令或子命令帮助。 | 显示当前 music 命令或子命令帮助。 | 显示 HTTP 服务参数帮助。 |
 
 `--cookie` 和 `--cookies` 可以同时传入；实现会合并两者。Cookie 通常具有时效性，使用浏览器导出的登录态时不要提交到 Git。
 
@@ -87,6 +186,8 @@ internal/
 | `fivesing` | 5sing | `5sing` |
 | `qianqian` | 千千音乐 | `千千音乐` |
 | `soda` | 汽水音乐 | `汽水音乐` |
+| `jamendo` | Jamendo | `Jamendo音乐` |
+| `joox` | JOOX | `JOOX音乐` |
 | `bilibili` | Bilibili | `bili` |
 | `apple` | Apple Music | `applemusic` |
 
@@ -106,6 +207,28 @@ internal/
 
 # 平台也支持中文名，限制每个平台返回数量
 ./media-dl music search -p 网易云音乐 -l 5 --singer "周杰伦" -t "晴天"
+```
+
+#### 酷狗登录 Cookie 搜索
+
+如果 Chrome 已经登录酷狗，可以复制浏览器当前请求使用的完整 Cookie，再传给 `--cookie`。打开酷狗页面后按 `F12`（macOS Chrome 为 `⌥⌘I`）打开开发者工具，进入 **Network / 网络**，刷新页面或播放歌曲，选择一个 `kugou.com` 请求，在 **Headers / 标头 → Request Headers / 请求标头** 中复制 `Cookie` 的完整值。
+
+下面的写法不会把 Cookie 直接写进命令历史：执行 `read` 后，在隐藏输入中粘贴 Cookie 并回车。
+
+```bash
+read -r -s KUGOU_COOKIE
+echo
+
+./media-dl music search -p kugou "太阳之子" \
+  --cookie "$KUGOU_COOKIE"
+
+unset KUGOU_COOKIE
+```
+
+也可以使用导出的 Netscape 格式 Cookie 文件：
+
+```bash
+./media-dl music search -p kugou "太阳之子" --cookies cookies.txt
 ```
 
 参数：
@@ -129,6 +252,23 @@ internal/
 ./media-dl music dl qq "https://y.qq.com/n/ryqq/songDetail/xxx" --cover --lyrics
 ./media-dl music download kuwo "https://www.kuwo.cn/play_detail/123456" -o ./downloads -n "我的歌曲"
 ```
+
+酷狗搜索结果需要登录态时，下载命令也要传入同一个 Cookie。先按上面的方式复制 Cookie，再执行：
+
+```bash
+read -r -s KUGOU_COOKIE
+echo
+
+./media-dl music download kugou \
+  "https://www.kugou.com/song/#hash=YOUR_KUGOU_HASH" \
+  --cookie "$KUGOU_COOKIE" \
+  --cover --lyrics \
+  -o ./downloads
+
+unset KUGOU_COOKIE
+```
+
+`YOUR_KUGOU_HASH` 替换为酷狗歌曲链接中的实际 hash。Cookie 可能过期或受账号权限限制，不能下载的 VIP/付费资源即使带 Cookie 也可能仍然无法获取。
 
 参数：
 
@@ -472,6 +612,20 @@ B 站出现 **412**、小红书笔记页打不开、西瓜/微博解析失败、
 ./media-dl video info bili "URL" --cookie "SESSDATA=xxx; bili_jct=xxx; buvid3=xxx"
 ./media-dl music search -p apple "Love Story" --cookie "media-user-token=xxx"
 ```
+
+Chrome 已登录酷狗时，酷狗搜索和下载可以直接使用完整 Cookie：
+
+```bash
+./media-dl music search -p kugou "太阳之子" \
+  --cookie 'KugooID=xxx; ...'
+
+./media-dl music download kugou \
+  "https://www.kugou.com/song/#hash=YOUR_KUGOU_HASH" \
+  --cookie 'KugooID=xxx; ...' \
+  -o ./downloads
+```
+
+上面的 `KugooID=xxx; ...` 只是占位示例，请替换为 Chrome 开发者工具中复制的完整 `Cookie` 值。Cookie 含登录信息，请勿提交到 Git 或发给他人。
 
 `cookies.txt` 含登录态，**不要提交到 Git**（已在 `.gitignore` 中忽略）。
 

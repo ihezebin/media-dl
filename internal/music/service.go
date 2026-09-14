@@ -4,12 +4,15 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strings"
 	"sync"
 
 	"github.com/guohuiyuan/music-lib/apple"
 	"github.com/guohuiyuan/music-lib/bilibili"
 	"github.com/guohuiyuan/music-lib/fivesing"
+	"github.com/guohuiyuan/music-lib/jamendo"
+	"github.com/guohuiyuan/music-lib/joox"
 	"github.com/guohuiyuan/music-lib/kugou"
 	"github.com/guohuiyuan/music-lib/kuwo"
 	"github.com/guohuiyuan/music-lib/migu"
@@ -31,6 +34,8 @@ var PlatformNames = []string{
 	"fivesing",
 	"qianqian",
 	"soda",
+	"jamendo",
+	"joox",
 	"bilibili",
 	"apple",
 }
@@ -55,6 +60,10 @@ var platformAliases = map[string]string{
 	"咪咕音乐":        "migu",
 	"fivesing":    "fivesing",
 	"5sing":       "fivesing",
+	"jamendo":     "jamendo",
+	"jamendo音乐":   "jamendo",
+	"joox":        "joox",
+	"joox音乐":      "joox",
 	"qianqian":    "qianqian",
 	"千千":          "qianqian",
 	"千千音乐":        "qianqian",
@@ -72,11 +81,13 @@ var platformAliases = map[string]string{
 
 // Provider 将 music-lib 的平台实例统一为 CLI 所需的歌曲能力。
 type Provider struct {
-	Name           string
-	Search         func(string) ([]musicmodel.Song, error)
-	Parse          func(string) (*musicmodel.Song, error)
-	GetDownloadURL func(*musicmodel.Song) (string, error)
-	GetLyrics      func(*musicmodel.Song) (string, error)
+	Name                   string
+	Search                 func(string) ([]musicmodel.Song, error)
+	SearchCandidates       func(string, int) ([]musicmodel.Song, error)
+	Parse                  func(string) (*musicmodel.Song, error)
+	GetDownloadURL         func(*musicmodel.Song) (string, error)
+	GetDownloadURLFallback func(*musicmodel.Song) (string, error)
+	GetLyrics              func(*musicmodel.Song) (string, error)
 }
 
 // Service 是音乐搜索、链接解析和下载的统一入口。
@@ -109,31 +120,47 @@ func (s *Service) provider(name string) (Provider, error) {
 	switch canon {
 	case "netease":
 		p := netease.New(s.cookie)
-		return Provider{canon, p.Search, p.Parse, p.GetDownloadURL, p.GetLyrics}, nil
+		return Provider{Name: canon, Search: p.Search, Parse: p.Parse, GetDownloadURL: p.GetDownloadURL, GetLyrics: p.GetLyrics}, nil
 	case "qq":
 		p := qq.New(s.cookie)
-		return Provider{canon, p.Search, p.Parse, p.GetDownloadURL, p.GetLyrics}, nil
+		return Provider{Name: canon, Search: p.Search, Parse: p.Parse, GetDownloadURL: p.GetDownloadURL, GetLyrics: p.GetLyrics}, nil
 	case "kugou":
 		p := kugou.New(s.cookie)
-		return Provider{canon, p.Search, p.Parse, p.GetDownloadURL, p.GetLyrics}, nil
+		return Provider{
+			Name:   canon,
+			Search: func(keyword string) ([]musicmodel.Song, error) { return searchKugouSongs(keyword, 10, s.cookie) },
+			SearchCandidates: func(keyword string, limit int) ([]musicmodel.Song, error) {
+				return searchKugouSongs(keyword, limit, s.cookie)
+			},
+			Parse:                  p.Parse,
+			GetDownloadURL:         p.GetDownloadURL,
+			GetDownloadURLFallback: p.GetDownloadURLBySonginfo,
+			GetLyrics:              p.GetLyrics,
+		}, nil
 	case "kuwo":
 		p := kuwo.New(s.cookie)
-		return Provider{canon, p.Search, p.Parse, p.GetDownloadURL, p.GetLyrics}, nil
+		return Provider{Name: canon, Search: p.Search, Parse: p.Parse, GetDownloadURL: p.GetDownloadURL, GetLyrics: p.GetLyrics}, nil
 	case "migu":
 		p := migu.New(s.cookie)
-		return Provider{canon, p.Search, p.Parse, p.GetDownloadURL, p.GetLyrics}, nil
+		return Provider{Name: canon, Search: p.Search, Parse: p.Parse, GetDownloadURL: p.GetDownloadURL, GetLyrics: p.GetLyrics}, nil
 	case "fivesing":
 		p := fivesing.New(s.cookie)
-		return Provider{canon, p.Search, p.Parse, p.GetDownloadURL, p.GetLyrics}, nil
+		return Provider{Name: canon, Search: p.Search, Parse: p.Parse, GetDownloadURL: p.GetDownloadURL, GetLyrics: p.GetLyrics}, nil
+	case "jamendo":
+		p := jamendo.New(s.cookie)
+		return Provider{Name: canon, Search: p.Search, Parse: p.Parse, GetDownloadURL: p.GetDownloadURL, GetLyrics: p.GetLyrics}, nil
+	case "joox":
+		p := joox.New(s.cookie)
+		return Provider{Name: canon, Search: p.Search, Parse: p.Parse, GetDownloadURL: p.GetDownloadURL, GetLyrics: p.GetLyrics}, nil
 	case "qianqian":
 		p := qianqian.New(s.cookie)
-		return Provider{canon, p.Search, p.Parse, p.GetDownloadURL, p.GetLyrics}, nil
+		return Provider{Name: canon, Search: p.Search, Parse: p.Parse, GetDownloadURL: p.GetDownloadURL, GetLyrics: p.GetLyrics}, nil
 	case "soda":
 		p := soda.New(s.cookie)
-		return Provider{canon, p.Search, p.Parse, p.GetDownloadURL, p.GetLyrics}, nil
+		return Provider{Name: canon, Search: p.Search, Parse: p.Parse, GetDownloadURL: p.GetDownloadURL, GetLyrics: p.GetLyrics}, nil
 	case "bilibili":
 		p := bilibili.New(s.cookie)
-		return Provider{canon, p.Search, p.Parse, p.GetDownloadURL, p.GetLyrics}, nil
+		return Provider{Name: canon, Search: p.Search, Parse: p.Parse, GetDownloadURL: p.GetDownloadURL, GetLyrics: p.GetLyrics}, nil
 	case "apple":
 		return Provider{
 			Name: canon,
@@ -183,8 +210,10 @@ type SearchOptions struct {
 	Keyword   string
 	Artist    string
 	Title     string
+	Album     string
 	Platforms []string
 	Limit     int
+	Cookies   map[string]string
 }
 
 type SearchResponse struct {
@@ -200,8 +229,8 @@ type PlatformSearchErr struct {
 }
 
 func (o SearchOptions) Query() string {
-	parts := make([]string, 0, 3)
-	for _, part := range []string{o.Keyword, o.Artist, o.Title} {
+	parts := make([]string, 0, 4)
+	for _, part := range []string{o.Keyword, o.Artist, o.Title, o.Album} {
 		if value := strings.TrimSpace(part); value != "" {
 			parts = append(parts, value)
 		}
@@ -242,19 +271,31 @@ func (s *Service) Search(opts SearchOptions) (*SearchResponse, error) {
 		wg.Add(1)
 		go func(index int, name string) {
 			defer wg.Done()
-			p, providerErr := s.provider(name)
+			cookie := s.platformCookie(name, opts.Cookies)
+			p, providerErr := New(cookie).provider(name)
 			if providerErr != nil {
 				ch <- result{index: index, err: providerErr}
 				return
 			}
 			songs, searchErr := p.Search(keyword)
-			if len(songs) > limit {
-				songs = songs[:limit]
+			if searchErr != nil {
+				ch <- result{index: index, err: searchErr}
+				return
+			}
+			if p.SearchCandidates != nil {
+				candidateLimit := limit * 3
+				if candidateLimit < limit+10 {
+					candidateLimit = limit + 10
+				}
+				if expanded, candidateErr := p.SearchCandidates(keyword, candidateLimit); candidateErr == nil && len(expanded) > len(songs) {
+					songs = expanded
+				}
 			}
 			for i := range songs {
 				songs[i].Source = p.Name
 			}
-			ch <- result{index: index, songs: songs, err: searchErr}
+			checked, validationErr := s.validateSearchResults(p, songs, limit, cookie)
+			ch <- result{index: index, songs: checked, err: validationErr}
 		}(i, platform)
 	}
 	wg.Wait()
@@ -277,6 +318,26 @@ func (s *Service) Search(opts SearchOptions) (*SearchResponse, error) {
 		return resp, fmt.Errorf("所有音乐平台搜索失败")
 	}
 	return resp, nil
+}
+
+func (s *Service) searchProvider(name string, cookies map[string]string) (Provider, error) {
+	canon, err := NormalizePlatform(name)
+	if err != nil {
+		return Provider{}, err
+	}
+	return New(s.platformCookie(canon, cookies)).provider(canon)
+}
+
+func (s *Service) platformCookie(name string, cookies map[string]string) string {
+	cookie := s.cookie
+	for rawName, value := range cookies {
+		cookiePlatform, normalizeErr := NormalizePlatform(rawName)
+		if normalizeErr == nil && cookiePlatform == name && strings.TrimSpace(value) != "" {
+			cookie = strings.TrimSpace(value)
+			break
+		}
+	}
+	return cookie
 }
 
 func normalizePlatforms(platforms []string) ([]string, error) {
@@ -318,7 +379,29 @@ func (s *Service) Parse(client *httpx.Client, platform, rawURL string) (*musicmo
 			return nil, err
 		}
 	}
-	return p.Parse(rawURL)
+	song, parseErr := p.Parse(rawURL)
+	if parseErr == nil {
+		return song, nil
+	}
+	if p.Name != "kugou" || p.GetDownloadURLFallback == nil {
+		return nil, parseErr
+	}
+	hashMatches := regexp.MustCompile(`(?i)hash=([a-f0-9]{32})`).FindStringSubmatch(rawURL)
+	if len(hashMatches) < 2 {
+		return nil, parseErr
+	}
+	hash := strings.ToLower(hashMatches[1])
+	song = &musicmodel.Song{
+		Source: p.Name,
+		ID:     hash,
+		Link:   rawURL,
+		Extra:  map[string]string{"hash": hash},
+	}
+	if downloadURL, fallbackErr := p.GetDownloadURLFallback(song); fallbackErr == nil && strings.TrimSpace(downloadURL) != "" {
+		song.URL = downloadURL
+		return song, nil
+	}
+	return nil, parseErr
 }
 
 func (s *Service) Provider(platform string) (Provider, error) {

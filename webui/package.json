@@ -1,0 +1,54 @@
+{
+  "name": "media-dl-webui",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "lint": "eslint .",
+    "preview": "vite preview"
+  },
+  "lint-staged": {
+    "*.{ts,tsx,js,jsx}": [
+      "eslint --fix",
+      "prettier --write",
+      "git add"
+    ]
+  },
+  "dependencies": {
+    "@chinese-fonts/xiaolai": "^3.0.0",
+    "@free-fonts/zhuque-fangsong": "^1.0.0",
+    "@hanzi.pro/webfonts-lxgw-wenkai": "^0.1.0",
+    "@ant-design/icons": "^5.0.1",
+    "@hezebin/doraemon": "^1.3.4",
+    "antd": "^5.20.0",
+    "classnames": "^2.5.1",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-router-dom": "^6.10.0",
+    "sass": "^1.60.0",
+    "zustand": "^4.5.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.4",
+    "@types/node": "^24.12.2",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^6.0.1",
+    "eslint": "^9.39.4",
+    "eslint-config-prettier": "^9.1.0",
+    "eslint-import-resolver-typescript": "^3.6.1",
+    "eslint-plugin-import": "^2.29.1",
+    "eslint-plugin-prettier": "^5.1.3",
+    "eslint-plugin-react-hooks": "^7.0.1",
+    "eslint-plugin-react-refresh": "^0.5.2",
+    "eslint-plugin-unused-imports": "^3.1.0",
+    "globals": "^17.4.0",
+    "prettier": "^3.1.1",
+    "simple-zustand-devtools": "^1.1.0",
+    "typescript": "~6.0.2",
+    "typescript-eslint": "^8.58.0",
+    "vite": "^8.0.4"
+  }
+}

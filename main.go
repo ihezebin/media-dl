@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -10,6 +11,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	apihttp "github.com/hezebin/media-dl/httpserver"
 	"github.com/hezebin/media-dl/internal/httpx"
 	"github.com/hezebin/media-dl/internal/music"
 	"github.com/hezebin/media-dl/internal/video/downloader"
@@ -71,15 +73,66 @@ func newRootCommand() *cobra.Command {
 
 音乐:
   media-dl music search --artist "周杰伦" --title "晴天"
-  media-dl music download netease "https://music.163.com/#/song?id=123456"`,
+  media-dl music download netease "https://music.163.com/#/song?id=123456"
+
+服务:
+  media-dl server --port 8080 --web-dir ./webui/dist`,
 	}
 
-	root.PersistentFlags().StringVar(&flagProxy, "proxy", "", "video/music 共用的 HTTP/HTTPS 代理，如 http://127.0.0.1:7890")
-	root.PersistentFlags().StringVar(&flagCookies, "cookies", "", "video/music 共用的 Netscape cookies.txt 路径")
-	root.PersistentFlags().StringVar(&flagCookie, "cookie", "", "video/music 共用的直接 Cookie 头字符串")
+	root.PersistentFlags().StringVar(&flagProxy, "proxy", envOrDefault("MEDIA_DL_PROXY", ""), "video/music 共用的 HTTP/HTTPS 代理，如 http://127.0.0.1:7890")
+	root.PersistentFlags().StringVar(&flagCookies, "cookies", envOrDefault("MEDIA_DL_COOKIES", ""), "video/music 共用的 Netscape cookies.txt 路径")
+	root.PersistentFlags().StringVar(&flagCookie, "cookie", envOrDefault("MEDIA_DL_COOKIE", ""), "video/music 共用的直接 Cookie 头字符串")
 
-	root.AddCommand(newVideoCommand(), newMusicCommand())
+	root.AddCommand(newVideoCommand(), newMusicCommand(), newServerCommand())
 	return root
+}
+
+func newServerCommand() *cobra.Command {
+	var port uint
+	var webDir = envOrDefault("MEDIA_DL_WEB_DIR", "./webui/dist")
+	var outputDir = envOrDefault("MEDIA_DL_OUTPUT_DIR", "./downloads")
+	serverCmd := &cobra.Command{
+		Use:   "server",
+		Short: "启动 HTTP API 和 webui 服务",
+		Args:  cobra.NoArgs,
+		RunE: func(_ *cobra.Command, _ []string) error {
+			server, err := apihttp.New(context.Background(), apihttp.Config{
+				Port:        port,
+				Proxy:       flagProxy,
+				Cookie:      flagCookie,
+				CookiesFile: flagCookies,
+				OutputDir:   outputDir,
+				WebDir:      webDir,
+			})
+			if err != nil {
+				return err
+			}
+			return server.Run(context.Background())
+		},
+	}
+	serverCmd.Flags().UintVarP(&port, "port", "P", envUint("MEDIA_DL_PORT", 8080), "HTTP 服务端口")
+	serverCmd.Flags().StringVar(&webDir, "web-dir", webDir, "webui 构建目录")
+	serverCmd.Flags().StringVarP(&outputDir, "output", "o", outputDir, "下载文件保存目录")
+	return serverCmd
+}
+
+func envOrDefault(name, fallback string) string {
+	if value := strings.TrimSpace(os.Getenv(name)); value != "" {
+		return value
+	}
+	return fallback
+}
+
+func envUint(name string, fallback uint) uint {
+	value := strings.TrimSpace(os.Getenv(name))
+	if value == "" {
+		return fallback
+	}
+	var parsed uint
+	if _, err := fmt.Sscanf(value, "%d", &parsed); err != nil || parsed == 0 {
+		return fallback
+	}
+	return parsed
 }
 
 func newVideoCommand() *cobra.Command {
@@ -171,7 +224,7 @@ func newClient() (*httpx.Client, error) {
 			"weibo.com", "weibo.cn", "youku.com", "tudou.com",
 			"iqiyi.com", "iq.com", "ixigua.com", "toutiao.com", "qq.com",
 			"kugou.com", "5sing.kugou.com", "kuwo.cn", "migu.cn",
-			"music.163.com", "qqmusic.qq.com", "qishui.com",
+			"music.163.com", "qqmusic.qq.com", "qishui.com", "jamendo.com", "joox.com",
 			"apple.com", "music.apple.com",
 		} {
 			cookies = append(cookies, httpx.ParseCookieHeader(flagCookie, domain)...)
