@@ -1,7 +1,7 @@
-import { GithubOutlined, MoonOutlined, SunOutlined } from '@ant-design/icons'
+import { GithubOutlined, HomeOutlined, MoonOutlined, SunOutlined } from '@ant-design/icons'
 import { Dropdown, Tooltip } from 'antd'
 import type { MenuProps } from 'antd'
-import { Outlet, useNavigate } from 'react-router-dom'
+import { Outlet, useLocation, useNavigate } from 'react-router-dom'
 
 import { useStore } from '../../store'
 
@@ -15,6 +15,7 @@ const fontItems: MenuProps['items'] = [
 
 export default function LoggedLayout() {
   const navigate = useNavigate()
+  const location = useLocation()
   const themeDark = useStore((s) => s.themeDark)
   const setThemeDark = useStore((s) => s.setThemeDark)
   const fontFamily = useStore((s) => s.fontFamily)
@@ -28,6 +29,7 @@ export default function LoggedLayout() {
             <img src="/logo.svg" alt="" />
           </button>
           <div className={styles.topActions}>
+            {location.pathname !== '/' && <Tooltip title="返回首页"><button type="button" className={styles.iconButton} aria-label="返回首页" onClick={() => navigate('/')}><HomeOutlined /></button></Tooltip>}
             <Dropdown menu={{ items: fontItems, selectedKeys: [fontFamily], onClick: ({ key }) => setFontFamily(key as typeof fontFamily) }} trigger={['click']} placement="bottomRight">
               <button type="button" className={styles.iconButton} aria-label="切换字体" title="切换字体"><span className={styles.fontIcon}>字</span></button>
             </Dropdown>
