@@ -29,7 +29,7 @@ func TestServerRoutes(t *testing.T) {
 	}{
 		{name: "music platforms", path: "/api/music/platforms", want: http.StatusOK},
 		{name: "webui", path: "/", want: http.StatusOK},
-		{name: "proxy missing url", path: "/proxy", want: http.StatusBadRequest},
+		{name: "proxy missing url", path: "/api/proxy", want: http.StatusBadRequest},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

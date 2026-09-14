@@ -2,6 +2,12 @@
 
 用 Go 实现的轻量 CLI：解析多平台分享链接并下载视频，也支持聚合音乐搜索与下载。视频协议参考 [yt-dlp](https://github.com/yt-dlp/yt-dlp)、[you-get](https://github.com/soimort/you-get) 与 [dy-cli](https://github.com/Youhai020616/douyin)，按接口重写，而非翻译 Python；音乐能力基于 [guohuiyuan/music-lib](https://github.com/guohuiyuan/music-lib)。
 
+## Web UI
+
+![Web UI](./webui/docs/screenshot1.png)
+
+![Web UI](./webui/docs/screenshot2.png)
+
 ## 构建
 
 本机（当前系统 / 架构）：
@@ -67,11 +73,11 @@ docker compose -f docker-compose.local.yml up --build
 MEDIA_DL_PORT=8090 MEDIA_DL_PROXY=http://host.docker.internal:7890 make docker-up
 ```
 
-## 服务端使用 Docker 镜像 tag 部署
+## 服务器 Docker 镜像 tag 部署
 
 服务端不需要拉取或编译源代码，只运行镜像仓库中的 tag。默认镜像地址为 `ghcr.io/ihezebin/media-dl`，可以通过 `IMAGE_REPOSITORY` 覆盖。镜像内已经包含 Go 后端和编译后的 `webui` 前端，由同一个 `media-dl server` 进程提供服务。
 
-### 1. 使用 `make package` 构建并推送镜像
+### 1. `make package` 构建并推送镜像
 
 建议在仓库的 GitHub tag 上执行打包，例如：
 
@@ -97,7 +103,7 @@ DOCKER_PWD=<访问令牌> \
 make package
 ```
 
-### 2. 云服务器直接启动 Compose
+### 2. 服务器直接启动 Compose
 
 将 [docker-compose.yml](./docker-compose.yml) 和一个 `.env` 文件放到云服务器的部署目录；不需要复制项目源代码或 Dockerfile：
 
@@ -161,12 +167,12 @@ webui/                    Vite + React 前端
 
 以下参数是根命令的持久参数，`video info`、`video download`、`music search`、`music download`、`server` 均可使用。它们的参数名相同，但在三个命令域中的注入方式略有不同。
 
-| 参数 | 默认值 | video 行为 | music 行为 | server 行为 |
-| --- | --- | --- | --- | --- |
-| `--proxy` | 空 | 通过视频 HTTP 客户端代理解析、下载、封面和 DASH/HLS 请求。 | 配置 `music-lib` 和音乐下载使用的 HTTP transport，影响搜索、歌曲解析、下载、封面和歌词请求。 | 服务启动后，API 请求沿用该代理。 |
-| `--cookies` | 空 | 读取 Netscape 格式 `cookies.txt`，按 Cookie 的域名和路径规则注入视频请求，用于登录态、VIP、412 和风控场景。 | 读取同一文件，将 Cookie 传入音乐库；音乐页面、音频和封面请求也使用对应 Cookie。 | 服务启动时加载文件，后续 video/music API 请求共用。 |
-| `--cookie` | 空 | 将直接传入的 `Cookie` 头复制到支持的视频平台域名，用于临时登录态、VIP 或风控调试。 | 将原始 `Cookie` 头传入音乐库和音乐 HTTP 请求；Apple Music 可传 `media-user-token`，也可传音乐库支持的 `token`。 | 服务启动时保存该值，后续 API 请求共用。 |
-| `-h, --help` | — | 显示当前 video 命令或子命令帮助。 | 显示当前 music 命令或子命令帮助。 | 显示 HTTP 服务参数帮助。 |
+| 参数         | 默认值 | video 行为                                                                                                  | music 行为                                                                                                      | server 行为                                         |
+| ------------ | ------ | ----------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- | --------------------------------------------------- |
+| `--proxy`    | 空     | 通过视频 HTTP 客户端代理解析、下载、封面和 DASH/HLS 请求。                                                  | 配置 `music-lib` 和音乐下载使用的 HTTP transport，影响搜索、歌曲解析、下载、封面和歌词请求。                    | 服务启动后，API 请求沿用该代理。                    |
+| `--cookies`  | 空     | 读取 Netscape 格式 `cookies.txt`，按 Cookie 的域名和路径规则注入视频请求，用于登录态、VIP、412 和风控场景。 | 读取同一文件，将 Cookie 传入音乐库；音乐页面、音频和封面请求也使用对应 Cookie。                                 | 服务启动时加载文件，后续 video/music API 请求共用。 |
+| `--cookie`   | 空     | 将直接传入的 `Cookie` 头复制到支持的视频平台域名，用于临时登录态、VIP 或风控调试。                          | 将原始 `Cookie` 头传入音乐库和音乐 HTTP 请求；Apple Music 可传 `media-user-token`，也可传音乐库支持的 `token`。 | 服务启动时保存该值，后续 API 请求共用。             |
+| `-h, --help` | —      | 显示当前 video 命令或子命令帮助。                                                                           | 显示当前 music 命令或子命令帮助。                                                                               | 显示 HTTP 服务参数帮助。                            |
 
 `--cookie` 和 `--cookies` 可以同时传入；实现会合并两者。Cookie 通常具有时效性，使用浏览器导出的登录态时不要提交到 Git。
 
@@ -176,20 +182,20 @@ webui/                    Vite + React 前端
 
 音乐命令统一以 `media-dl music` 开头，由开源项目 `github.com/guohuiyuan/music-lib` 提供平台适配。本项目负责命令参数、跨平台聚合、Cookie/代理传递、文件保存和酷狗扩展链接转换。
 
-| 平台值 | 平台名称 | 常用别名 |
-| --- | --- | --- |
-| `netease` | 网易云音乐 | `163`、`网易云音乐` |
-| `qq` | QQ音乐 | `qqmusic`、`QQ音乐` |
-| `kugou` | 酷狗音乐 | `酷狗音乐` |
-| `kuwo` | 酷我音乐 | `酷我音乐` |
-| `migu` | 咪咕音乐 | `咪咕音乐` |
-| `fivesing` | 5sing | `5sing` |
-| `qianqian` | 千千音乐 | `千千音乐` |
-| `soda` | 汽水音乐 | `汽水音乐` |
-| `jamendo` | Jamendo | `Jamendo音乐` |
-| `joox` | JOOX | `JOOX音乐` |
-| `bilibili` | Bilibili | `bili` |
-| `apple` | Apple Music | `applemusic` |
+| 平台值     | 平台名称    | 常用别名            |
+| ---------- | ----------- | ------------------- |
+| `netease`  | 网易云音乐  | `163`、`网易云音乐` |
+| `qq`       | QQ音乐      | `qqmusic`、`QQ音乐` |
+| `kugou`    | 酷狗音乐    | `酷狗音乐`          |
+| `kuwo`     | 酷我音乐    | `酷我音乐`          |
+| `migu`     | 咪咕音乐    | `咪咕音乐`          |
+| `fivesing` | 5sing       | `5sing`             |
+| `qianqian` | 千千音乐    | `千千音乐`          |
+| `soda`     | 汽水音乐    | `汽水音乐`          |
+| `jamendo`  | Jamendo     | `Jamendo音乐`       |
+| `joox`     | JOOX        | `JOOX音乐`          |
+| `bilibili` | Bilibili    | `bili`              |
+| `apple`    | Apple Music | `applemusic`        |
 
 ### `music search` — 搜索歌曲
 
@@ -233,13 +239,13 @@ unset KUGOU_COOKIE
 
 参数：
 
-| 参数 | 默认值 | 说明 |
-| --- | --- | --- |
-| `[keyword]` | 空 | 通用搜索关键词，可与 `--artist` / `--title` 组合 |
-| `-p, --platform` | 全部平台 | 平台名，可重复传入或使用逗号分隔 |
-| `-a, --artist` / `--singer` | 空 | 歌手名 |
-| `-t, --title` | 空 | 歌曲名 |
-| `-l, --limit` | `10` | 每个平台最多返回的结果数 |
+| 参数                        | 默认值   | 说明                                             |
+| --------------------------- | -------- | ------------------------------------------------ |
+| `[keyword]`                 | 空       | 通用搜索关键词，可与 `--artist` / `--title` 组合 |
+| `-p, --platform`            | 全部平台 | 平台名，可重复传入或使用逗号分隔                 |
+| `-a, --artist` / `--singer` | 空       | 歌手名                                           |
+| `-t, --title`               | 空       | 歌曲名                                           |
+| `-l, --limit`               | `10`     | 每个平台最多返回的结果数                         |
 
 输出为 JSON。`results` 中的每项包含 `id`、`name`、`artist`、`album`、`source`、`link`、`url`、`ext`、`cover` 等字段；部分平台失败时，错误会保留在 `errors` 中，只要仍有搜索结果就不会导致命令失败。
 
@@ -272,12 +278,12 @@ unset KUGOU_COOKIE
 
 参数：
 
-| 参数 | 默认值 | 说明 |
-| --- | --- | --- |
-| `-o, --output` | `./downloads` | 保存目录，不存在时自动创建 |
-| `-n, --name` | 自动生成 | 输出文件名，不含扩展名；默认使用“歌名 - 歌手” |
-| `--cover` | `false` | 同时下载封面为 `.jpg` |
-| `--lyrics` | `false` | 同时获取并保存歌词为 `.lrc` |
+| 参数           | 默认值        | 说明                                          |
+| -------------- | ------------- | --------------------------------------------- |
+| `-o, --output` | `./downloads` | 保存目录，不存在时自动创建                    |
+| `-n, --name`   | 自动生成      | 输出文件名，不含扩展名；默认使用“歌名 - 歌手” |
+| `--cover`      | `false`       | 同时下载封面为 `.jpg`                         |
+| `--lyrics`     | `false`       | 同时获取并保存歌词为 `.lrc`                   |
 
 #### 酷狗 URL 解析
 
@@ -301,18 +307,16 @@ Apple Music 的搜索和单曲解析可用；当前上游 `music-lib` 的 `GetDo
 
 ### 支持平台
 
-| 平台值           | 别名              | 典型链接                                                                 |
-| ------------- | --------------- | -------------------------------------------------------------------- |
-| `douyin`      | `dy`            | `v.douyin.com`、`www.douyin.com/video/...`                            |
-| `bilibili`    | `bili`、`b23`    | `www.bilibili.com/video/BV...`、`b23.tv/...`                          |
-| `xiaohongshu` | `xhs`           | `www.xiaohongshu.com/explore/...`、`discovery/item/...`、`xhslink.com` |
-| `weibo`       | `wb`、`微博`       | `weibo.com/{uid}/{id}`、`m.weibo.cn/status/...`、`weibo.com/tv/show/`  |
-| `youku`       | `yk`、`优酷`       | `v.youku.com/v_show/id_...`、`play.tudou.com/v_show/id_...`           |
-| `iqiyi`       | `iq`、`爱奇艺`      | `www.iqiyi.com/v_....html`                                           |
-| `xigua`       | `ixigua`、`西瓜视频` | `www.ixigua.com/{id}`、`v.ixigua.com/...`                             |
-| `tencent`     | `qq`、`腾讯视频`     | `v.qq.com/x/page/...`、`v.qq.com/x/cover/.../...`                     |
-
-
+| 平台值        | 别名                 | 典型链接                                                               |
+| ------------- | -------------------- | ---------------------------------------------------------------------- |
+| `douyin`      | `dy`                 | `v.douyin.com`、`www.douyin.com/video/...`                             |
+| `bilibili`    | `bili`、`b23`        | `www.bilibili.com/video/BV...`、`b23.tv/...`                           |
+| `xiaohongshu` | `xhs`                | `www.xiaohongshu.com/explore/...`、`discovery/item/...`、`xhslink.com` |
+| `weibo`       | `wb`、`微博`         | `weibo.com/{uid}/{id}`、`m.weibo.cn/status/...`、`weibo.com/tv/show/`  |
+| `youku`       | `yk`、`优酷`         | `v.youku.com/v_show/id_...`、`play.tudou.com/v_show/id_...`            |
+| `iqiyi`       | `iq`、`爱奇艺`       | `www.iqiyi.com/v_....html`                                             |
+| `xigua`       | `ixigua`、`西瓜视频` | `www.ixigua.com/{id}`、`v.ixigua.com/...`                              |
+| `tencent`     | `qq`、`腾讯视频`     | `v.qq.com/x/page/...`、`v.qq.com/x/cover/.../...`                      |
 
 ### `video info` — 只获取信息
 
@@ -323,8 +327,6 @@ Apple Music 的搜索和单曲解析可用；当前上游 `music-lib` 的 `GetDo
 ```bash
 ./media-dl video info <platform> <url> [--proxy ...] [--cookies ...] [--cookie ...]
 ```
-
-
 
 ### 示例
 
@@ -339,56 +341,44 @@ Apple Music 的搜索和单曲解析可用；当前上游 `music-lib` 的 `GetDo
 ./media-dl video info tencent "https://v.qq.com/x/page/q326831cny0.html"
 ```
 
-
-
 ### 输出
 
 - **格式**：缩进 JSON。除 `err_msg` 外字段集合固定（缺省值用空字符串 / `0` / `[]` / `false`，不会省略键）。`err_msg` **仅失败时出现**。
 - **出口**：stdout；可用管道：`./media-dl video info dy "URL" | jq .video_url`
 - **失败**：仍输出 JSON（`success: false` + `err_msg`），退出码非 0。
 
-
-
 #### 顶层字段
 
-
-| 字段            | 类型     | 含义                                                                                                  |
-| ------------- | ------ | --------------------------------------------------------------------------------------------------- |
-| `success`     | bool   | 是否解析成功                                                                                              |
-| `err_msg`     | string | **仅失败时存在**：具体失败原因（如下线、VIP、风控、链接无法识别）                                                              |
-| `platform`    | string | 平台标识：`douyin` / `bilibili` / `xiaohongshu` / `weibo` / `youku` / `iqiyi` / `xigua` / `tencent`      |
-| `id`          | string | 平台侧内容 ID。抖音为 `aweme_id`；B 站为 BV 号（多分 P 时可能带 `_pN`）；小红书为笔记 ID                                        |
-| `title`       | string | 标题；抖音常与文案相同，小红书无标题时可能回退到描述或 ID                                                                      |
-| `description` | string | 描述 / 文案；没有则为 `""`                                                                                   |
-| `author`      | string | 作者昵称                                                                                                |
-| `author_id`   | string | 作者平台 ID（抖音 uid、B 站 mid、小红书 userId）；没有则为 `""`                                                        |
-| `duration`    | number | 时长，单位**秒**；解析不到时为 `0`                                                                               |
-| `cover_url`   | string | 封面图 URL；没有则为 `""`                                                                                   |
-| `webpage_url` | string | 规范化后的页面链接（便于打开或二次请求）                                                                                |
+| 字段          | 类型   | 含义                                                                                                                                                        |
+| ------------- | ------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `success`     | bool   | 是否解析成功                                                                                                                                                |
+| `err_msg`     | string | **仅失败时存在**：具体失败原因（如下线、VIP、风控、链接无法识别）                                                                                           |
+| `platform`    | string | 平台标识：`douyin` / `bilibili` / `xiaohongshu` / `weibo` / `youku` / `iqiyi` / `xigua` / `tencent`                                                         |
+| `id`          | string | 平台侧内容 ID。抖音为 `aweme_id`；B 站为 BV 号（多分 P 时可能带 `_pN`）；小红书为笔记 ID                                                                    |
+| `title`       | string | 标题；抖音常与文案相同，小红书无标题时可能回退到描述或 ID                                                                                                   |
+| `description` | string | 描述 / 文案；没有则为 `""`                                                                                                                                  |
+| `author`      | string | 作者昵称                                                                                                                                                    |
+| `author_id`   | string | 作者平台 ID（抖音 uid、B 站 mid、小红书 userId）；没有则为 `""`                                                                                             |
+| `duration`    | number | 时长，单位**秒**；解析不到时为 `0`                                                                                                                          |
+| `cover_url`   | string | 封面图 URL；没有则为 `""`                                                                                                                                   |
+| `webpage_url` | string | 规范化后的页面链接（便于打开或二次请求）                                                                                                                    |
 | `video_url`   | string | **优选**下载地址，等于对 `formats` 按质量/是否一体流评分后的最佳项的 `url`。一般可直接拿去下载；B 站若该项是 DASH 纯视频，还需配合对应项的 `audio_url` 合并 |
-| `formats`     | array  | 全部可用流列表，元素结构见下表；无流时为 `[]`                                                                           |
-
-
-
+| `formats`     | array  | 全部可用流列表，元素结构见下表；无流时为 `[]`                                                                                                               |
 
 #### `formats[]` 字段
 
-
-| 字段                  | 类型     | 含义                                                                             |
-| ------------------- | ------ | ------------------------------------------------------------------------------ |
-| `format_id`         | string | 流标识。例如抖音 `no_watermark`、B 站 `durl_16` / `dash_64`、小红书 `HD` / `origin`          |
-| `url`               | string | 该流的媒体地址（可能带签名，有时效）                                                             |
-| `ext`               | string | 建议扩展名，如 `mp4`、`jpg`                                                            |
-| `quality`           | string | 清晰度标签（如 `720p`、`HD`）；未知为 `""`                                                  |
-| `width` / `height`  | number | 分辨率；未知为 `0`                                                                    |
-| `filesize`          | number | 字节大小；未知为 `0`                                                                   |
-| `vcodec` / `acodec` | string | 视/音频编码名；未知或无对应轨时可能为 `""` / `none`                                              |
-| `has_video`         | bool   | 是否含视频轨                                                                         |
-| `has_audio`         | bool   | 是否含音频（一体流，或可通过 `audio_url` 配齐）                                                 |
+| 字段                | 类型   | 含义                                                                                                                  |
+| ------------------- | ------ | --------------------------------------------------------------------------------------------------------------------- |
+| `format_id`         | string | 流标识。例如抖音 `no_watermark`、B 站 `durl_16` / `dash_64`、小红书 `HD` / `origin`                                   |
+| `url`               | string | 该流的媒体地址（可能带签名，有时效）                                                                                  |
+| `ext`               | string | 建议扩展名，如 `mp4`、`jpg`                                                                                           |
+| `quality`           | string | 清晰度标签（如 `720p`、`HD`）；未知为 `""`                                                                            |
+| `width` / `height`  | number | 分辨率；未知为 `0`                                                                                                    |
+| `filesize`          | number | 字节大小；未知为 `0`                                                                                                  |
+| `vcodec` / `acodec` | string | 视/音频编码名；未知或无对应轨时可能为 `""` / `none`                                                                   |
+| `has_video`         | bool   | 是否含视频轨                                                                                                          |
+| `has_audio`         | bool   | 是否含音频（一体流，或可通过 `audio_url` 配齐）                                                                       |
 | `audio_url`         | string | DASH **分离音轨**地址。非空表示 `url` 多为纯视频，下载时需与本字段合并（`download` 会自动用 ffmpeg）；一体流则为 `""` |
-
-
-
 
 #### 输出示例（结构示意）
 
@@ -446,8 +436,6 @@ Apple Music 的搜索和单曲解析可用；当前上游 `music-lib` 的 `GetDo
 
 ---
 
-
-
 ### `video download` / `video dl` — 下载
 
 先解析（逻辑与 `info` 相同），再按优选格式下载到本地。
@@ -459,20 +447,14 @@ Apple Music 的搜索和单曲解析可用；当前上游 `music-lib` 的 `GetDo
 ./media-dl video dl <platform> <url> [flags]
 ```
 
-
-
 ### 参数
 
-
-| 参数                                   | 默认    | 说明                          | 对应输出                               |
-| ------------------------------------ | ----- | --------------------------- | ---------------------------------- |
-| `-o, --output`                       | `.`   | 保存目录（不存在会创建）                | 文件写到该目录                            |
-| `-f, --format`                       | `mp4` | 输出容器（`mp4` / `mkv` 等）       | 主视频扩展名；DASH 合并 / remux 时传给 ffmpeg  |
-| `-n, --name`                         | 空     | 文件名（**不含**扩展名）；空则用标题消毒后的文件名 | `{name}.{format}`，封面为 `{name}.jpg` |
-| `--cover`                            | false | 同时下载封面                      | 额外写出封面文件                           |
-
-
-
+| 参数           | 默认  | 说明                                               | 对应输出                                      |
+| -------------- | ----- | -------------------------------------------------- | --------------------------------------------- |
+| `-o, --output` | `.`   | 保存目录（不存在会创建）                           | 文件写到该目录                                |
+| `-f, --format` | `mp4` | 输出容器（`mp4` / `mkv` 等）                       | 主视频扩展名；DASH 合并 / remux 时传给 ffmpeg |
+| `-n, --name`   | 空    | 文件名（**不含**扩展名）；空则用标题消毒后的文件名 | `{name}.{format}`，封面为 `{name}.jpg`        |
+| `--cover`      | false | 同时下载封面                                       | 额外写出封面文件                              |
 
 ### 示例
 
@@ -487,22 +469,16 @@ Apple Music 的搜索和单曲解析可用；当前上游 `music-lib` 的 `GetDo
 ./media-dl video dl tencent "https://v.qq.com/x/page/q326831cny0.html" -o ./downloads
 ```
 
-
-
 ### 输出
 
-
-| 通道         | 内容                                                                        |
-| ---------- | ------------------------------------------------------------------------- |
-| **stderr** | 进度：`解析中...`、平台/ID/标题摘要、下载百分比；结束时 `完成: <视频路径>`，若 `--cover` 成功还有 `封面: <路径>` |
-| **文件系统**   | 主文件：`<output>/<name>.<format>`；`--cover` 时另有 `<output>/<name>.jpg`        |
-
+| 通道         | 内容                                                                                                             |
+| ------------ | ---------------------------------------------------------------------------------------------------------------- |
+| **stderr**   | 进度：`解析中...`、平台/ID/标题摘要、下载百分比；结束时 `完成: <视频路径>`，若 `--cover` 成功还有 `封面: <路径>` |
+| **文件系统** | 主文件：`<output>/<name>.<format>`；`--cover` 时另有 `<output>/<name>.jpg`                                       |
 
 下载选用规则与 `info` 的 `video_url` 一致：优先音视频一体流，否则 DASH 视频 + `audio_url` 经 ffmpeg 合并。
 
 ### 视频平台说明
-
-
 
 #### 抖音
 
@@ -511,8 +487,6 @@ Apple Music 的搜索和单曲解析可用；当前上游 `music-lib` 的 `GetDo
 - 播放地址 `playwm` → `play` 尽量无水印
 - 可提取封面 `origin_cover` / `cover`
 - 若 detail 仍为空，可用浏览器导出 Cookie：`--cookies cookies.txt`
-
-
 
 #### 哔哩哔哩
 
@@ -525,16 +499,12 @@ Apple Music 的搜索和单曲解析可用；当前上游 `music-lib` 的 `GetDo
 - 优先一体流 `durl`，否则 DASH + ffmpeg 合并
 - 仍 412 时用浏览器导出 Cookie：`--cookies cookies.txt`
 
-
-
 #### 小红书
 
 - 支持 `xhslink.com` 短链
 - 解析页面 `window.__INITIAL_STATE__`
 - 优先 `originVideoKey` 原片，否则取 `masterUrl` / `backupUrls`
 - 完整分享链接建议保留 `xsec_token`；打不开时加 `--cookies`
-
-
 
 #### 微博
 
@@ -545,8 +515,6 @@ Apple Music 的搜索和单曲解析可用；当前上游 `music-lib` 的 `GetDo
 - 播放地址来自 `playback_list` / TV `urls`
 - 403 时加 `--cookies`，下载时带 `Referer: https://weibo.com/`
 
-
-
 #### 优酷
 
 参考 yt-dlp / you-get：`ups.youku.com/ups/get.json`。
@@ -556,8 +524,6 @@ Apple Music 的搜索和单曲解析可用；当前上游 `music-lib` 的 `GetDo
 - 优先分段 `cdn_url`，否则 HLS `m3u8_url`（需 ffmpeg）
 - 版权/地区限制或加密视频可能需要国内网络与 `--cookies`
 
-
-
 #### 爱奇艺
 
 参考 lux 的 VPS 签名，以及 yt-dlp / you-get 的移动端 `tmts`。
@@ -566,8 +532,6 @@ Apple Music 的搜索和单曲解析可用；当前上游 `music-lib` 的 `GetDo
 - 再用 `baseinfo` 补 `vid`；优先 `cache.video.iqiyi.com/vps` 分段 MP4，失败回退 `tmts` m3u8
 - 已下线内容会直接报「视频已下线」；VIP 正片通常只能下试看段，可加 `--cookies`
 
-
-
 #### 西瓜视频
 
 PC 页有 antibot，主路径走头条移动详情 `m.toutiao.com/i{id}/info/`，再用 `play_auth_token_v2` 调火山引擎 `GetPlayInfo`。
@@ -575,8 +539,6 @@ PC 页有 antibot，主路径走头条移动详情 `m.toutiao.com/i{id}/info/`�
 - 支持 `www.ixigua.com/{id}`、`m.ixigua.com/video/{id}`、`v.ixigua.com` 短链、部分头条链接
 - 自动注册 `ttwid`；有浏览器 Cookie 时仍可回退页面 `SSR_HYDRATED_DATA`
 - 播放地址带 `Referer: https://www.ixigua.com/`
-
-
 
 #### 腾讯视频
 
@@ -587,16 +549,16 @@ PC 页有 antibot，主路径走头条移动详情 `m.toutiao.com/i{id}/info/`�
 - 失败则用 AES-CBC 生成 `cKey` 请求 `h5vv6.video.qq.com/getvinfo`（HLS，需 ffmpeg）
 - 剧集封面页（仅 cover、无 vid）不支持整季下载；VIP 内容需登录 Cookie
 
-
-
 ## Cookie 文件
 
 B 站出现 **412**、小红书笔记页打不开、西瓜/微博解析失败、腾讯/爱奇艺 VIP 内容无法解析，或音乐平台需要登录态时，把浏览器里已能正常访问对应站点的 Cookie 导出给 CLI 使用。
 
 1. 用 Chrome / Edge / Firefox 打开对应站点并确认能正常访问内容（**不必登录账号**，有时仅打开过首页产生的 Cookie 也够；登录通常更稳）。
 2. 安装 Cookie 导出扩展，例如：
-  - Chrome：[Get cookies.txt LOCALLY](https://chromewebstore.google.com/detail/get-cookiestxt-locally/cclelndahbckbenkjhflpdbgdldlbecc)
-  - 或 [Cookie-Editor](https://chromewebstore.google.com/detail/cookie-editor/hlkenndednhfkekhgcdicdfddnkalmdm)（导出为 Netscape 格式）
+
+- Chrome：[Get cookies.txt LOCALLY](https://chromewebstore.google.com/detail/get-cookiestxt-locally/cclelndahbckbenkjhflpdbgdldlbecc)
+- 或 [Cookie-Editor](https://chromewebstore.google.com/detail/cookie-editor/hlkenndednhfkekhgcdicdfddnkalmdm)（导出为 Netscape 格式）
+
 3. 在目标站点标签页点击扩展 → **Export / 导出** → 选择 **Netscape** 格式 → 保存为项目目录下的 `cookies.txt`。
 4. 调用时带上文件：
 

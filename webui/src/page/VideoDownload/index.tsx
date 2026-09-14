@@ -2,7 +2,7 @@ import { CheckCircleFilled, CloudDownloadOutlined, LinkOutlined, PlayCircleFille
 import { message, Spin } from 'antd'
 import { useState } from 'react'
 
-import { downloadVideo, getVideoInfo, type VideoInfo } from '../../api/media'
+import { downloadVideo, getVideoInfo, proxyURL, type VideoInfo } from '../../api/media'
 
 import styles from './index.module.scss'
 
@@ -67,7 +67,7 @@ export default function VideoDownload() {
         <button type="button" className={styles.downloadButton} onClick={download} disabled={downloading}>{downloading ? <Spin size="small" /> : <CloudDownloadOutlined />}{downloading ? '下载中' : '下载视频'}</button>
       </div>
       <div className={styles.videoStage}>
-        {result.video_url && !previewError ? <video controls playsInline preload="metadata" poster={result.cover_url || undefined} src={result.video_url} onError={() => setPreviewError(true)}>您的浏览器不支持视频播放。</video> : <div className={styles.videoEmpty}><PlayCircleFilled /><strong>{result.video_url ? '当前视频地址暂不支持直接预览' : '当前结果没有可预览的视频地址'}</strong><span>可以尝试点击右上角下载视频。</span></div>}
+        {result.video_url && !previewError ? <video controls playsInline preload="metadata" poster={proxyURL(result.cover_url)} src={proxyURL(result.video_url)} onError={() => setPreviewError(true)}>您的浏览器不支持视频播放。</video> : <div className={styles.videoEmpty}><PlayCircleFilled /><strong>{result.video_url ? '当前视频地址暂不支持直接预览' : '当前结果没有可预览的视频地址'}</strong><span>可以尝试点击右上角下载视频。</span></div>}
       </div>
     </section>}
     <section className={styles.platformSection}><div className={styles.sectionTitle}><span>SUPPORTED SOURCES</span><h2>支持的平台</h2></div><div className={styles.platformGrid}>{platforms.map((platform) => <div className={styles.platform} key={platform.name}><span className={styles.platformDot} style={{ background: platform.color }} />{platform.name}<span className={styles.platformArrow}>↗</span></div>)}</div></section>

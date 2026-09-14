@@ -9,3 +9,83 @@
 @media (max-width: 760px) { .page { padding: 84px 16px 32px; }.searchPanel { padding: 16px; }.searchRow { flex-wrap: wrap; }.searchInput { flex-basis: 100%; }.searchButton { min-height: 44px; flex: 1; }.platforms { grid-template-columns: repeat(2, minmax(0, 1fr)); }.track { grid-template-columns: 22px 42px minmax(0, 1fr) auto; gap: 9px; padding: 10px 0; }.trackCoverButton { width: 42px; height: 42px; }.source, .duration { display: none; }.trackActions { grid-column: 3 / 5; justify-content: flex-start; gap: 8px; }.playerTop { padding: 20px; }.playerBody { display: flex; flex-direction: column; justify-content: center; gap: 26px; padding: 0 26px 24px; }.disc { width: min(58vw, 260px); }.discOrbit { width: min(70vw, 320px); }.tonearm { display: none; }.lyricSide { width: 100%; text-align: center; }.playerMeta { margin-bottom: 12px; }.playerMeta h2 { font-size: 28px; }.lyrics { max-height: 220px; }.lyrics p { font-size: 14px; margin-bottom: 10px; }.lyrics .activeLyric { font-size: 19px; }.playerControls { padding: 0 26px 24px; } }
 @media (max-width: 520px) { .pageIntroRow { align-items: flex-start; }.cookieButton { padding: 0 10px; font-size: 11px; }.cookieButton :global(.anticon) { margin-right: -2px; } }
 .cookieSectionHead { display: flex; align-items: center; justify-content: space-between; color: var(--app-muted); font-size: 12px; }.cookieSectionHead strong { color: var(--app-ink); font-size: 13px; }.cookieSectionHead span { color: var(--app-faint); font-size: 11px; }.cookieEntries { display: flex; flex-direction: column; gap: 10px; }.cookieEntry { display: flex; flex-direction: column; gap: 9px; padding: 11px; border: 1px solid var(--app-line); border-radius: 12px; background: color-mix(in srgb, var(--app-shell-bg) 72%, var(--app-surface-solid)); }.cookieEntryHead { display: flex; align-items: center; justify-content: space-between; gap: 8px; }.cookieEntry .cookiePlatform { flex: 1; padding: 0; border: 0; background: transparent; }.cookieRemoveButton { display: grid; place-items: center; width: 30px; height: 30px; border: 1px solid color-mix(in srgb, #ef4444 25%, var(--app-line)); border-radius: 8px; color: #ef4444; background: color-mix(in srgb, #ef4444 7%, transparent); cursor: pointer; transition: .18s ease; }.cookieRemoveButton:hover { border-color: #ef4444; background: color-mix(in srgb, #ef4444 13%, transparent); }.cookieEntry :global(.ant-input) { font-size: 11px; line-height: 1.55; }.cookieEmpty, .cookieAllAdded { padding: 17px 12px; border: 1px dashed var(--app-line-strong); border-radius: 10px; color: var(--app-faint); background: color-mix(in srgb, var(--app-shell-bg) 70%, transparent); font-size: 12px; text-align: center; }.cookieAddArea { display: flex; flex-direction: column; gap: 10px; }.cookieAddButton { display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-height: 38px; border: 1px dashed color-mix(in srgb, var(--app-accent) 48%, var(--app-line)); border-radius: 9px; color: var(--app-accent); background: color-mix(in srgb, var(--app-accent) 5%, transparent); font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; transition: .18s ease; }.cookieAddButton:hover { border-color: var(--app-accent); background: color-mix(in srgb, var(--app-accent) 11%, transparent); }.cookieAddForm { display: flex; flex-direction: column; gap: 10px; padding: 12px; border: 1px solid color-mix(in srgb, var(--app-accent) 22%, var(--app-line)); border-radius: 11px; background: color-mix(in srgb, var(--app-accent) 3%, var(--app-surface-solid)); }.cookieAddConfirm { display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-height: 36px; border: 0; border-radius: 8px; color: #fff; background: var(--app-accent); font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; }.cookieAddConfirm:hover { filter: brightness(1.06); }.cookieSaveButton { margin-top: 3px; }
+/* Full-screen player controls follow the ncm-web dark bottom-bar layout. */
+.playerOverlay { background: radial-gradient(80% 80% at 20% 40%, color-mix(in srgb, var(--app-accent) 16%, var(--app-shell-bg)), transparent 64%), var(--app-shell-bg); color: var(--app-ink); color-scheme: var(--app-color-scheme); }
+.playerOverlay::before { opacity: .08; background-image: linear-gradient(color-mix(in srgb, var(--app-ink) 10%, transparent) 1px, transparent 1px), linear-gradient(90deg, color-mix(in srgb, var(--app-ink) 10%, transparent) 1px, transparent 1px); }
+.playerTop { position: relative; z-index: 3; flex: 0 0 auto; align-items: center; padding: 16px 24px 10px; }
+.playerMode { color: var(--app-faint); letter-spacing: .08em; }
+.closePlayer { position: relative; z-index: 4; border: 0; background: color-mix(in srgb, var(--app-ink) 6%, transparent); color: var(--app-muted); pointer-events: auto; touch-action: manipulation; }
+.closePlayer:hover { color: var(--app-ink); background: color-mix(in srgb, var(--app-ink) 14%, transparent); }
+.playerBody { grid-template-columns: minmax(240px, 42%) minmax(0, 1fr); gap: 8px; padding: 4px 12px 0; }
+.discSide { padding: 12px 12px 32px; }
+.discOrbit { border-color: var(--app-line-strong); box-shadow: 0 0 0 18px color-mix(in srgb, var(--app-ink) 3%, transparent), 0 0 80px var(--app-shadow-accent); }
+.disc { background: radial-gradient(circle at 50% 50%, color-mix(in srgb, var(--app-ink) 16%, var(--app-shell-bg)) 0 28%, transparent 29%), repeating-radial-gradient(circle at 50% 50%, color-mix(in srgb, var(--app-ink) 78%, var(--app-shell-bg)) 0 1px, color-mix(in srgb, var(--app-ink) 62%, var(--app-shell-bg)) 1px 3px, color-mix(in srgb, var(--app-ink) 86%, var(--app-shell-bg)) 3px 5px); box-shadow: 0 18px 48px var(--app-shadow-accent), inset 0 0 0 1px var(--app-line), inset 0 0 40px color-mix(in srgb, var(--app-ink) 5%, transparent); }
+.playerOverlay .artwork, .playerOverlay .artworkLarge { color: var(--app-ink); }
+.discGrooves { border-color: var(--app-line-strong); box-shadow: inset 0 0 0 26px color-mix(in srgb, var(--app-ink) 8%, transparent), inset 0 0 0 27px color-mix(in srgb, var(--app-ink) 4%, transparent); }
+.discCenter { box-shadow: inset 0 0 0 3px var(--app-line-strong), 0 0 0 1px color-mix(in srgb, var(--app-ink) 50%, transparent); }
+.tonearm { top: 10%; right: 25%; background: linear-gradient(var(--app-ink), var(--app-muted)); box-shadow: 4px 8px 20px var(--app-shadow-accent); }
+.tonearm span { background: var(--app-ink); }
+.lyricSide { display: flex; flex-direction: column; max-width: none; padding: 18px 28px 8px 8px; }
+.playerMeta { flex: 0 0 auto; margin-bottom: 16px; text-align: center; }
+.playerMeta span { color: var(--app-faint); }
+.playerMeta h2 { margin: 0 0 10px; color: var(--app-ink); font-size: clamp(22px, 2.4vw, 30px); }
+.playerMeta p { display: flex; justify-content: center; color: var(--app-faint); font-size: 13px; }
+.lyrics { flex: 1; height: auto; max-height: none; min-height: 0; padding: 8px 16px; mask-image: linear-gradient(to bottom, transparent 0%, var(--app-ink) 10%, var(--app-ink) 90%, transparent 100%); }
+.lyricTrack { display: flex; flex-direction: column; align-items: center; gap: 22px; padding: 8px 0; will-change: transform; transition: transform .45s cubic-bezier(.22,1,.36,1); }
+.lyrics .lyricLine { max-width: min(640px, 100%); margin: 0; color: var(--app-faint); font-size: 16px; line-height: 1.6; font-weight: 500; text-align: center; cursor: pointer; word-break: break-word; transition: color .25s ease, font-size .25s ease, opacity .25s ease; }
+.lyrics .lyricLine:hover, .lyrics .nearLyric { color: var(--app-muted); }
+.lyrics .activeLyric { color: var(--app-ink); font-size: 22px; font-weight: 700; }
+.lyrics .activeLyric:hover { color: var(--app-ink); }
+.lyricsLoading { color: var(--app-faint) !important; font-size: 14px !important; }
+.playerControls { --player-panel-bg: #17181d; --player-panel-bg-deep: #101115; --player-red: #ef4444; flex: 0 0 auto; padding: 16px 7vw 28px; border-top: 1px solid #2c2e36; background: linear-gradient(180deg, var(--player-panel-bg), var(--player-panel-bg-deep)); color: #f5f5f5; color-scheme: dark; box-shadow: 0 -14px 34px rgba(0, 0, 0, .2); }
+.progressMeta { display: flex; justify-content: space-between; margin-bottom: 5px; color: #a7abb8; font-size: 11px; font-variant-numeric: tabular-nums; }
+.progressInput { display: block; width: 100%; height: 4px; accent-color: var(--player-red); cursor: pointer; }
+.controlRow { display: grid; grid-template-columns: minmax(180px, 1fr) auto minmax(180px, 1fr); align-items: center; gap: 24px; padding-top: 16px; }
+.controlTrack { display: flex; align-items: center; min-width: 0; gap: 10px; color: #f5f5f5; }
+.controlTrack > .artwork { flex: 0 0 40px; width: 40px; height: 40px; border-radius: 5px; overflow: hidden; }
+.controlTrack > span { display: flex; min-width: 0; flex-direction: column; gap: 3px; }
+.controlTrack strong, .controlTrack small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.controlTrack strong { font-size: 13px; font-weight: 600; }
+.controlTrack small { color: #a7abb8; font-size: 11px; }
+.controlButtons { display: flex; align-items: center; justify-content: center; gap: 0; }
+.controlButtons button { border: 0; background: transparent; color: #a7abb8; cursor: pointer; }
+.controlButtons button:hover { color: #fff; }
+.controlButtons .playButton { display: grid; place-items: center; width: 48px; height: 48px; border-radius: 50%; background: #2c2e36; color: #fff; font-size: 22px; transition: transform .18s ease, background .18s ease; }
+.controlButtons .playButton:hover { transform: scale(1.05); background: #3a3d47; }
+.controlOptions { display: flex; align-items: center; justify-content: flex-end; gap: 4px; }
+.controlOptionWrap { position: relative; }
+.optionButton { display: grid; place-items: center; width: 36px; height: 36px; border: 0; border-radius: 50%; background: transparent; color: #a7abb8; font-size: 18px; cursor: pointer; }
+.optionButton:hover, .optionButtonActive { color: #fff; background: rgba(239, 68, 68, .22); }
+.rateButton { width: auto; min-width: 40px; padding: 0 6px; font-size: 12px; font-weight: 650; font-variant-numeric: tabular-nums; }
+.volumePopover, .ratePopover { position: absolute; bottom: calc(100% + 10px); left: 50%; z-index: 5; transform: translateX(-50%); border: 1px solid #353843; border-radius: 10px; background: #1b1d23; box-shadow: 0 12px 32px rgba(0, 0, 0, .32); }
+.volumePopover { display: flex; align-items: center; justify-content: center; width: 40px; height: 120px; padding: 12px 0; }
+.volumePopover :global(.ant-slider) { height: 96px; margin: 0; }
+.volumePopover :global(.ant-slider-rail) { background: #454852 !important; }
+.volumePopover :global(.ant-slider-track) { background: var(--player-red) !important; }
+.volumePopover :global(.ant-slider-handle::after) { background: #fff !important; box-shadow: 0 0 0 2px var(--player-red) !important; }
+.ratePopover { display: flex; min-width: 64px; flex-direction: column; gap: 2px; padding: 6px; }
+.ratePopover button { height: 30px; border: 0; border-radius: 7px; background: transparent; color: #a7abb8; font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; cursor: pointer; }
+.ratePopover button:hover, .rateOptionActive { color: #fff !important; background: rgba(239, 68, 68, .22) !important; }
+
+@media (max-width: 860px) {
+  .playerBody { display: grid; grid-template-columns: 1fr; grid-template-rows: auto minmax(0, 1fr); justify-content: initial; gap: 8px; }
+  .discSide { padding: 4px 12px 8px; }
+  .disc { width: min(42vw, 220px); }
+  .discOrbit { width: min(52vw, 270px); }
+  .lyricSide { height: 100%; overflow: hidden; padding: 4px 16px 8px; }
+  .playerMeta h2 { font-size: 20px; }
+  .controlRow { grid-template-columns: minmax(0, 1fr) auto; grid-template-rows: auto auto; gap: 8px; }
+  .controlTrack { grid-column: 1 / -1; }
+  .controlOptions { justify-content: flex-end; }
+}
+
+@media (max-width: 520px) {
+  .playerTop { padding: 12px 16px 8px; }
+  .playerBody { padding-inline: 6px; }
+  .lyrics { max-height: 220px; }
+  .lyrics .lyricLine { font-size: 14px; }
+  .lyrics .activeLyric { font-size: 19px; }
+  .playerControls { padding: 14px 18px 20px; }
+  .controlTrack > .artwork { flex-basis: 34px; width: 34px; height: 34px; }
+  .controlButtons .playButton { width: 44px; height: 44px; }
+}

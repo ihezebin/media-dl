@@ -9,24 +9,10 @@ import (
 
 	"github.com/gin-gonic/gin"
 	musicmodel "github.com/guohuiyuan/music-lib/model"
-	videomodel "github.com/hezebin/media-dl/internal/video/model"
 )
 
-const proxyPath = "/proxy"
-
-// proxyURL exposes external music resources through the same HTTP origin as
-// the web UI. Empty, relative, and non-HTTP URLs are left untouched.
-func proxyURL(raw string) string {
-	raw = strings.TrimSpace(raw)
-	if raw == "" || isProxyURL(raw) {
-		return raw
-	}
-	target, err := url.Parse(raw)
-	if err != nil || !isHTTPURL(target) {
-		return raw
-	}
-	return proxyPath + "?url=" + url.QueryEscape(raw)
-}
+const proxyPath = "/api/proxy"
+const legacyProxyPath = "/proxy"
 
 func unproxyURL(raw string) string {
 	raw = strings.TrimSpace(raw)
@@ -34,18 +20,13 @@ func unproxyURL(raw string) string {
 		return raw
 	}
 	target, err := url.Parse(raw)
-	if err != nil || target.Path != proxyPath {
+	if err != nil || (target.Path != proxyPath && target.Path != legacyProxyPath) {
 		return raw
 	}
 	if original := strings.TrimSpace(target.Query().Get("url")); original != "" {
 		return original
 	}
 	return raw
-}
-
-func isProxyURL(raw string) bool {
-	target, err := url.Parse(raw)
-	return err == nil && target.Path == proxyPath && target.Query().Get("url") != ""
 }
 
 func isHTTPURL(target *url.URL) bool {
@@ -153,10 +134,6 @@ func defaultMusicProxyHeaders(target *url.URL) map[string]string {
 	return nil
 }
 
-func proxyMusicSong(song *musicmodel.Song) {
-	transformMusicSong(song, proxyURL)
-}
-
 func unproxyMusicSong(song *musicmodel.Song) {
 	transformMusicSong(song, unproxyURL)
 }
@@ -171,62 +148,6 @@ func transformMusicSong(song *musicmodel.Song, transform func(string) string) {
 	for key, value := range song.Extra {
 		song.Extra[key] = transform(value)
 	}
-}
-
-func proxyVideoInfo(info *videomodel.VideoInfo) {
-	if info == nil {
-		return
-	}
-	bestHeaders := map[string]string(nil)
-	if best := info.BestFormat(); best != nil {
-		bestHeaders = best.Headers
-	}
-	info.CoverURL = proxyVideoURL(info.CoverURL, bestHeaders)
-	info.VideoURL = proxyVideoURL(info.VideoURL, bestHeaders)
-	for i := range info.Formats {
-		format := &info.Formats[i]
-		format.URL = proxyVideoURL(format.URL, format.Headers)
-		format.AudioURL = proxyVideoURL(format.AudioURL, format.Headers)
-	}
-}
-
-func unproxyVideoInfo(info *videomodel.VideoInfo) {
-	transformVideoInfo(info, unproxyURL)
-}
-
-func transformVideoInfo(info *videomodel.VideoInfo, transform func(string) string) {
-	if info == nil {
-		return
-	}
-	info.VideoURL = transform(info.VideoURL)
-	info.CoverURL = transform(info.CoverURL)
-	for i := range info.Formats {
-		info.Formats[i].URL = transform(info.Formats[i].URL)
-		info.Formats[i].AudioURL = transform(info.Formats[i].AudioURL)
-	}
-}
-
-func proxyVideoURL(raw string, headers map[string]string) string {
-	proxied := proxyURL(raw)
-	if proxied == raw || len(headers) == 0 {
-		return proxied
-	}
-	target, err := url.Parse(proxied)
-	if err != nil {
-		return proxied
-	}
-	query := target.Query()
-	for name, queryName := range map[string]string{
-		"Referer":    "referer",
-		"Origin":     "origin",
-		"User-Agent": "user_agent",
-	} {
-		if value := headers[name]; isProxyHeaderValue(name, value) {
-			query.Set(queryName, value)
-		}
-	}
-	target.RawQuery = query.Encode()
-	return target.String()
 }
 
 func isProxyHeaderValue(name, value string) bool {

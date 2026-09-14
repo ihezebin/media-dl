@@ -45,6 +45,27 @@ export type FileResponse = {
 
 type Envelope<T> = { code: number; message?: string; data: T }
 
+const proxyHeaderNames: Record<string, string> = { Referer: 'referer', Origin: 'origin', 'User-Agent': 'user_agent' }
+
+// API responses keep upstream URLs; only browser media requests use /api/proxy.
+export function proxyURL(raw: string, headers?: Record<string, string>) {
+  const value = raw.trim()
+  if (!value) return raw
+  try {
+    const parsed = new URL(value, window.location.origin)
+    if (parsed.origin === window.location.origin && parsed.pathname === '/api/proxy' && parsed.searchParams.has('url')) return value
+  } catch {
+    return raw
+  }
+  if (!/^https?:\/\//i.test(value)) return raw
+  const query = new URLSearchParams({ url: value })
+  Object.entries(proxyHeaderNames).forEach(([headerName, queryName]) => {
+    const headerValue = headers?.[headerName]?.trim()
+    if (headerValue) query.set(queryName, headerValue)
+  })
+  return `/api/proxy?${query.toString()}`
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(path, {
     ...init,

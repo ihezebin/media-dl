@@ -107,7 +107,7 @@ curl -X POST http://127.0.0.1:8080/api/video/download \
 
 `format` 默认为 `mp4`，`name` 可指定不含扩展名的文件名，`cover` 控制是否下载封面。B 站 DASH、HLS 和多段视频合并需要 `ffmpeg`。
 
-视频解析响应中的 `video_url`、`cover_url` 以及格式里的媒体地址会返回为同源 `/proxy?url=...` 地址，浏览器预览和前端直接使用这些地址即可。对于抖音等需要防盗链请求头的平台，代理地址还会携带解析器提供的 `Referer`、`Origin` 和 `User-Agent` 上下文；服务端执行下载时会自动还原上游地址。
+视频解析响应中的 `video_url`、`cover_url` 以及格式里的媒体地址始终返回上游原始地址。浏览器预览时由 webui 在请求行为中将地址拼接到同源 `/api/proxy?url=...`，服务端 API 不改写响应数据；服务端执行下载时直接使用原始地址。
 
 ## 安全边界
 

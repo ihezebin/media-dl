@@ -88,7 +88,7 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 
 	server := &Server{app: app, config: cfg, outputDir: outputDir, webDir: webDir}
 	app.RegisterRoutes(server)
-	if err := app.RegisterOpenAPIUI("/openapi", olympus.SwaggerUI); err != nil {
+	if err := app.RegisterOpenAPIUI("/openapi", olympus.StoplightUI); err != nil {
 		return nil, fmt.Errorf("注册 OpenAPI 文档失败: %w", err)
 	}
 	server.registerFilesAndWeb()
@@ -160,9 +160,6 @@ func (s *Server) musicSearch(_ *gin.Context, req musicSearchRequest) (*music.Sea
 	if err != nil && len(response.Results) == 0 {
 		return response, badRequest(err)
 	}
-	for i := range response.Results {
-		proxyMusicSong(&response.Results[i])
-	}
 	return response, nil
 }
 
@@ -192,7 +189,6 @@ func (s *Server) musicResolve(_ *gin.Context, req musicResolveRequest) (*musicmo
 	if err != nil {
 		return nil, badRequest(err)
 	}
-	proxyMusicSong(song)
 	return song, nil
 }
 
@@ -299,7 +295,6 @@ func (s *Server) videoInfo(_ *gin.Context, req videoInfoRequest) (*model.VideoIn
 	if err != nil {
 		return nil, badRequest(err)
 	}
-	proxyVideoInfo(info)
 	return info, nil
 }
 
@@ -316,7 +311,6 @@ func (s *Server) videoDownload(ctx *gin.Context, req videoDownloadRequest) (*fil
 	if err != nil {
 		return nil, err
 	}
-	unproxyVideoInfo(info)
 	client, err := s.client()
 	if err != nil {
 		return nil, badRequest(err)

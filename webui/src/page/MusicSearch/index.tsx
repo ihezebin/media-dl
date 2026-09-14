@@ -1,14 +1,13 @@
 import {
   AppleFilled, BilibiliFilled, ControlOutlined, CustomerServiceOutlined, DeleteOutlined, DownloadOutlined, FileTextOutlined,
   FolderOpenOutlined, GlobalOutlined, KeyOutlined, LinkOutlined, PictureOutlined, PlusOutlined, QqOutlined,
-  PlayCircleFilled, PauseCircleFilled, SearchOutlined, SoundOutlined,
-  StepBackwardOutlined, StepForwardOutlined, CloseOutlined, UserOutlined,
+  CaretRightFilled, CloseOutlined, PauseOutlined, PlayCircleFilled, SearchOutlined, SoundOutlined, UserOutlined,
 } from '@ant-design/icons'
-import { Drawer, Input, message, Select, Spin, Tooltip } from 'antd'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { Drawer, Input, message, Select, Slider, Spin, Tooltip } from 'antd'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { CSSProperties } from 'react'
 
-import { downloadMusicAsset, getMusicLyrics, getMusicPlatforms, resolveMusicSong, searchMusic, type MusicSong } from '../../api/media'
+import { downloadMusicAsset, getMusicLyrics, getMusicPlatforms, proxyURL, resolveMusicSong, searchMusic, type MusicSong } from '../../api/media'
 
 import styles from './index.module.scss'
 
@@ -60,27 +59,123 @@ function PlatformLogo({ platform }: { platform: string }) {
 }
 
 function formatDuration(seconds: number) {
-  if (!seconds) return '--:--'
-  return `${String(Math.floor(seconds / 60)).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`
+  if (!Number.isFinite(seconds) || seconds <= 0) return '0:00'
+  const total = Math.floor(seconds)
+  return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`
 }
 
 function Artwork({ song, large = false }: { song: MusicSong; large?: boolean }) {
   const fallback = platformColors[song.source] || '#1677ff'
-  return <div className={large ? styles.artworkLarge : styles.artwork} style={{ background: song.cover ? undefined : `linear-gradient(145deg, ${fallback}, #121a32)` }}>{song.cover ? <img src={song.cover} alt="" /> : <SoundOutlined />}</div>
+  return <div className={large ? styles.artworkLarge : styles.artwork} style={{ background: song.cover ? undefined : `linear-gradient(145deg, ${fallback}, color-mix(in srgb, var(--app-accent-deep) 55%, var(--app-shell-bg)))` }}>{song.cover ? <img src={proxyURL(song.cover)} alt="" /> : <SoundOutlined />}</div>
 }
 
-function parseLyrics(raw: string) {
-  return raw.split(/\r?\n/).map((line) => line.replace(/^\s*\[\d{1,3}:\d{1,2}(?:\.\d{1,3})?\]\s*/, '').trim()).filter(Boolean)
+type LyricLine = { id: string; time: number | null; text: string }
+
+function parseLyricTime(raw: string) {
+  const match = raw.match(/^(\d{1,3}):(\d{2})(?:[.:](\d{1,3}))?$/)
+  if (!match) return null
+  const fraction = match[3] ? Number(`0.${match[3]}`) : 0
+  return Number(match[1]) * 60 + Number(match[2]) + fraction
 }
 
-function Player({ song, playing, currentTime, duration, lyrics, onClose, onToggle, onSeek }: { song: MusicSong; playing: boolean; currentTime: number; duration: number; lyrics: string[]; onClose: () => void; onToggle: () => void; onSeek: (value: number) => void }) {
+function parseLyrics(raw: string): LyricLine[] {
+  const lines: LyricLine[] = []
+  raw.split(/\r?\n/).forEach((line, lineIndex) => {
+    const trimmed = line.trim()
+    if (!trimmed || /^\[[a-zA-Z_][\w-]*:.*\]$/.test(trimmed)) return
+
+    const timestampPattern = /\[(\d{1,3}:\d{2}(?:[.:]\d{1,3})?)\]/g
+    const timestamps = [...trimmed.matchAll(timestampPattern)]
+    if (!timestamps.length) {
+      const text = trimmed
+      lines.push({ id: `lyric-${lineIndex}`, time: null, text })
+      return
+    }
+
+    const segments = timestamps.map((timestamp, timestampIndex) => {
+      const start = (timestamp.index ?? 0) + timestamp[0].length
+      const end = timestamps[timestampIndex + 1]?.index ?? trimmed.length
+      return { time: parseLyricTime(timestamp[1]), text: trimmed.slice(start, end).trim() }
+    })
+    const nonEmptySegments = segments.filter((segment) => segment.text)
+    const hasTextBetweenTimestamps = segments.slice(0, -1).some((segment) => segment.text)
+    // Some lyric providers put a timestamp before every character but keep the
+    // sentence on one physical line. The newline, rather than those embedded
+    // timestamps, is the sentence boundary for this format.
+    const isLineBasedTimestampedLyric = timestamps.length >= 4 && hasTextBetweenTimestamps
+
+    if (isLineBasedTimestampedLyric) {
+      const firstTimedSegment = nonEmptySegments.find((segment) => segment.time !== null)
+      const text = trimmed.replace(timestampPattern, '').trim()
+      if (firstTimedSegment && firstTimedSegment.time !== null && text) {
+        lines.push({ id: `lyric-${lineIndex}`, time: firstTimedSegment.time, text })
+      }
+      return
+    }
+
+    // Preserve the usual LRC meaning of multiple timestamps before one lyric.
+    const text = nonEmptySegments[0]?.text
+    if (text && !hasTextBetweenTimestamps) {
+      timestamps.forEach((timestamp, timestampIndex) => {
+        const time = parseLyricTime(timestamp[1])
+        if (time !== null) lines.push({ id: `lyric-${lineIndex}-${timestampIndex}`, time, text })
+      })
+      return
+    }
+
+    segments.forEach((segment, segmentIndex) => {
+      if (segment.time !== null && segment.text) {
+        lines.push({ id: `lyric-${lineIndex}-${segmentIndex}`, time: segment.time, text: segment.text })
+      }
+    })
+  })
+  return lines
+}
+
+function findActiveLyricIndex(lines: LyricLine[], currentTime: number) {
+  let active = -1
+  for (let index = 0; index < lines.length; index += 1) {
+    const time = lines[index].time
+    if (time !== null && time <= currentTime) active = index
+  }
+  return active
+}
+
+const playbackRates = [0.5, 0.75, 1, 1.25, 1.5, 2]
+
+function Player({ song, playing, currentTime, duration, lyrics, lyricLoading, volume, muted, playbackRate, onClose, onToggle, onSeek, onVolumeChange, onMuteChange, onPlaybackRateChange }: { song: MusicSong; playing: boolean; currentTime: number; duration: number; lyrics: LyricLine[]; lyricLoading: boolean; volume: number; muted: boolean; playbackRate: number; onClose: () => void; onToggle: () => void; onSeek: (value: number) => void; onVolumeChange: (value: number) => void; onMuteChange: (value: boolean) => void; onPlaybackRateChange: (value: number) => void }) {
+  const viewportRef = useRef<HTMLDivElement | null>(null)
+  const lineRefs = useRef<(HTMLParagraphElement | null)[]>([])
+  const [lyricOffsetY, setLyricOffsetY] = useState(0)
+  const [volumeOpen, setVolumeOpen] = useState(false)
+  const [rateOpen, setRateOpen] = useState(false)
+  const activeLyric = findActiveLyricIndex(lyrics, currentTime)
+  const totalDuration = duration || song.duration || 0
+  const progressValue = Math.min(Math.max(currentTime, 0), totalDuration || 1)
+
+  useLayoutEffect(() => {
+    lineRefs.current = []
+    setLyricOffsetY(0)
+  }, [song.id, lyrics.length])
+
+  useLayoutEffect(() => {
+    if (!lyrics.length || activeLyric < 0) return
+    const viewport = viewportRef.current
+    const line = lineRefs.current[activeLyric]
+    if (!viewport || !line) return
+    const viewportRect = viewport.getBoundingClientRect()
+    const lineRect = line.getBoundingClientRect()
+    const delta = viewportRect.height / 2 - (lineRect.top - viewportRect.top + lineRect.height / 2)
+    setLyricOffsetY((previous) => Math.abs(delta) > 0.5 ? previous + delta : previous)
+  }, [activeLyric, currentTime, lyrics.length])
+
   return <div className={styles.playerOverlay}>
     <div className={styles.playerTop}><span className={styles.playerMode}>NOW PLAYING / {platformLabels[song.source] || song.source}</span><button type="button" className={styles.closePlayer} onClick={onClose} aria-label="收起播放器"><CloseOutlined /></button></div>
     <div className={styles.playerBody}>
       <div className={styles.discSide}><div className={styles.discOrbit} /><div className={`${styles.disc} ${playing ? '' : styles.discPaused}`}><div className={styles.discGrooves} /><div className={styles.discCenter}><Artwork song={song} large /></div></div><div className={styles.tonearm}><span /></div></div>
-      <div className={styles.lyricSide}><div className={styles.playerMeta}><span>来自 {song.album || '未知专辑'}</span><h2>{song.name}</h2><p>{song.artist || '未知歌手'}</p></div><div className={styles.lyrics}>{lyrics.length ? lyrics.map((line, index) => <p key={`${line}-${index}`} className={index === Math.min(2, lyrics.length - 1) ? styles.activeLyric : ''}>{line}</p>) : <p className={styles.lyricsLoading}>歌词加载中，或该歌曲暂无歌词</p>}</div></div>
+      <div className={styles.lyricSide}><div className={styles.playerMeta}><span>来自 {song.album || '未知专辑'}</span><h2>{song.name}</h2><p>{song.artist || '未知歌手'}</p></div>{lyricLoading ? <div className={styles.lyrics}><p className={styles.lyricsLoading}>歌词加载中…</p></div> : lyrics.length ? <div ref={viewportRef} className={styles.lyrics}><div className={styles.lyricTrack} style={{ transform: `translateY(${lyricOffsetY}px)` }}>{lyrics.map((line, index) => <p key={line.id} ref={(element) => { lineRefs.current[index] = element }} className={`${styles.lyricLine} ${index === activeLyric ? styles.activeLyric : ''} ${Math.abs(index - activeLyric) === 1 ? styles.nearLyric : ''}`} onClick={() => line.time !== null && onSeek(line.time)}>{line.text}</p>)}</div></div> : <div className={styles.lyrics}><p className={styles.lyricsLoading}>暂无歌词</p></div>}</div>
     </div>
-    <div className={styles.playerControls}><input className={styles.progressInput} type="range" min={0} max={duration || 1} step="any" value={Math.min(currentTime, duration || 1)} onChange={(event) => onSeek(Number(event.target.value))} aria-label="播放进度" /><div className={styles.controlRow}><time>{formatDuration(currentTime)}</time><div className={styles.controlButtons}><button type="button" aria-label="上一首"><StepBackwardOutlined /></button><button type="button" className={styles.playButton} aria-label={playing ? '暂停' : '播放'} onClick={onToggle}>{playing ? <PauseCircleFilled /> : <PlayCircleFilled />}</button><button type="button" aria-label="下一首"><StepForwardOutlined /></button></div><time>{formatDuration(duration || song.duration)}</time></div></div>
+    <div className={styles.playerControls}><div className={styles.progressMeta}><time>{formatDuration(currentTime)}</time><time>{formatDuration(totalDuration)}</time></div><input className={styles.progressInput} type="range" min={0} max={totalDuration || 1} step="any" value={progressValue} onChange={(event) => onSeek(Number(event.target.value))} aria-label="播放进度" /><div className={styles.controlRow}><div className={styles.controlTrack}><Artwork song={song} /><span><strong>{song.name}</strong><small>{song.artist || '未知歌手'}</small></span></div><div className={styles.controlButtons}><button type="button" className={styles.playButton} aria-label={playing ? '暂停' : '播放'} onClick={onToggle}>{playing ? <PauseOutlined /> : <CaretRightFilled />}</button></div><div className={styles.controlOptions}><div className={styles.controlOptionWrap}><Tooltip title={muted || volume === 0 ? '取消静音' : '音量'}><button type="button" className={`${styles.optionButton} ${volumeOpen ? styles.optionButtonActive : ''}`} onClick={() => { setRateOpen(false); setVolumeOpen((open) => !open) }} onDoubleClick={() => onMuteChange(!muted)} aria-label="音量"><SoundOutlined /></button></Tooltip>{volumeOpen && <div className={styles.volumePopover}><Slider vertical min={0} max={100} value={Math.round((muted ? 0 : volume) * 100)} onChange={(value) => { const next = Number(value) / 100; if (muted && next > 0) onMuteChange(false); onVolumeChange(next) }} tooltip={{ open: false }} /></div>}</div><div className={styles.controlOptionWrap}><Tooltip title="倍速"><button type="button" className={`${styles.optionButton} ${styles.rateButton} ${rateOpen ? styles.optionButtonActive : ''}`} onClick={() => { setVolumeOpen(false); setRateOpen((open) => !open) }} aria-label="倍速" aria-pressed={rateOpen}>{playbackRate}x</button></Tooltip>{rateOpen && <div className={styles.ratePopover} role="listbox" aria-label="播放倍速">{[...playbackRates].reverse().map((rate) => <button type="button" role="option" aria-selected={playbackRate === rate} key={rate} className={playbackRate === rate ? styles.rateOptionActive : styles.rateOption} onClick={() => { onPlaybackRateChange(rate); setRateOpen(false) }}>{rate}x</button>)}</div>}</div></div></div></div>
   </div>
 }
 
@@ -106,6 +201,16 @@ function readStoredPlatformCookies() {
   }
 }
 
+function readStoredNumber(key: string, fallback: number, min: number, max: number) {
+  if (typeof window === 'undefined') return fallback
+  try {
+    const value = Number(window.localStorage.getItem(key))
+    return Number.isFinite(value) ? Math.min(max, Math.max(min, value)) : fallback
+  } catch {
+    return fallback
+  }
+}
+
 export default function MusicSearch() {
   const [keyword, setKeyword] = useState('')
   const [type, setType] = useState<'song' | 'artist' | 'album'>('song')
@@ -124,7 +229,11 @@ export default function MusicSearch() {
   const [isPlaying, setIsPlaying] = useState(false)
   const [currentTime, setCurrentTime] = useState(0)
   const [duration, setDuration] = useState(0)
-  const [lyrics, setLyrics] = useState<string[]>([])
+  const [lyrics, setLyrics] = useState<LyricLine[]>([])
+  const [lyricLoading, setLyricLoading] = useState(false)
+  const [volume, setVolume] = useState(() => readStoredNumber('media-dl.player.volume', 0.8, 0, 1))
+  const [muted, setMuted] = useState(false)
+  const [playbackRate, setPlaybackRate] = useState(() => readStoredNumber('media-dl.player.rate', 1, 0.5, 2))
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const platformCookiesRef = useRef<Record<string, string>>({})
 
@@ -139,17 +248,32 @@ export default function MusicSearch() {
     setIsPlaying(false); setCurrentTime(0); setDuration(0); setLyrics([])
     if (!song) return
     let cancelled = false
-    const audio = new Audio(song.url)
+    const audio = new Audio(proxyURL(song.url))
     audioRef.current = audio
     const onTime = () => setCurrentTime(audio.currentTime)
     const onMeta = () => setDuration(audio.duration || song.duration || 0)
     const onEnded = () => setIsPlaying(false)
     const onError = () => message.error('播放地址不可用，请尝试下载歌曲')
     audio.addEventListener('timeupdate', onTime); audio.addEventListener('loadedmetadata', onMeta); audio.addEventListener('ended', onEnded); audio.addEventListener('error', onError)
+    setLyricLoading(true)
     if (song.url) audio.play().then(() => !cancelled && setIsPlaying(true)).catch(() => !cancelled && setIsPlaying(false))
-    getMusicLyrics(song, platformCookiesRef.current[song.source] || '').then((result) => !cancelled && setLyrics(parseLyrics(result.lyrics))).catch(() => !cancelled && setLyrics([]))
+    getMusicLyrics(song, platformCookiesRef.current[song.source] || '').then((result) => !cancelled && setLyrics(parseLyrics(result.lyrics))).catch(() => !cancelled && setLyrics([])).finally(() => !cancelled && setLyricLoading(false))
     return () => { cancelled = true; audio.pause(); audio.removeEventListener('timeupdate', onTime); audio.removeEventListener('loadedmetadata', onMeta); audio.removeEventListener('ended', onEnded); audio.removeEventListener('error', onError) }
   }, [playing])
+
+  useEffect(() => {
+    const audio = audioRef.current
+    if (audio) {
+      audio.volume = muted ? 0 : volume
+      audio.playbackRate = playbackRate
+    }
+    try {
+      window.localStorage.setItem('media-dl.player.volume', String(volume))
+      window.localStorage.setItem('media-dl.player.rate', String(playbackRate))
+    } catch {
+      // 播放控制仍然有效，只是不保存偏好
+    }
+  }, [volume, muted, playbackRate])
 
   const allSelected = selectedPlatforms.length === platforms.length
   const selectedCount = selectedPlatforms.length
@@ -246,6 +370,6 @@ export default function MusicSearch() {
         <button type="button" className={styles.cookieSaveButton} onClick={saveCookies}><KeyOutlined />保存全部 Cookie</button>
       </div>
     </Drawer>
-    {playing && <Player song={playing} playing={isPlaying} currentTime={currentTime} duration={duration} lyrics={lyrics} onClose={() => setPlaying(null)} onToggle={togglePlaying} onSeek={(value) => { if (audioRef.current) audioRef.current.currentTime = value; setCurrentTime(value) }} />}
+    {playing && <Player song={playing} playing={isPlaying} currentTime={currentTime} duration={duration} lyrics={lyrics} lyricLoading={lyricLoading} volume={volume} muted={muted} playbackRate={playbackRate} onClose={() => setPlaying(null)} onToggle={togglePlaying} onSeek={(value) => { if (audioRef.current) audioRef.current.currentTime = value; setCurrentTime(value) }} onVolumeChange={setVolume} onMuteChange={setMuted} onPlaybackRateChange={setPlaybackRate} />}
   </div>
 }
