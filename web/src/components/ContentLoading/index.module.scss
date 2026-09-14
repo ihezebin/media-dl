@@ -1,0 +1,68 @@
+.root {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  padding: 48px 16px;
+  min-height: 240px;
+  background: transparent;
+  overflow: visible;
+}
+
+.cover {
+  flex: 1;
+  min-height: 0;
+  height: 100%;
+  padding: 24px 16px;
+}
+
+.rings {
+  position: relative;
+  width: 120px;
+  height: 120px;
+  flex-shrink: 0;
+  overflow: visible;
+}
+
+.ring {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  border-top-color: color-mix(in srgb, var(--app-accent) 55%, transparent);
+  border-right-color: color-mix(in srgb, var(--app-accent) 22%, transparent);
+  transform: translate(-50%, -50%);
+  animation: ringSpin 1.1s linear infinite;
+  box-sizing: border-box;
+}
+
+.ringA {
+  width: 36px;
+  height: 36px;
+  animation-duration: 0.9s;
+}
+
+.ringB {
+  width: 64px;
+  height: 64px;
+  border-top-color: color-mix(in srgb, var(--app-accent-2) 50%, transparent);
+  border-right-color: color-mix(in srgb, var(--app-accent-2) 18%, transparent);
+  animation-direction: reverse;
+  animation-duration: 1.35s;
+}
+
+.ringC {
+  width: 96px;
+  height: 96px;
+  border-style: dashed;
+  border-color: color-mix(in srgb, var(--app-accent-deep) 28%, transparent);
+  border-top-color: color-mix(in srgb, var(--app-accent-deep) 48%, transparent);
+  animation-duration: 1.8s;
+}
+
+@keyframes ringSpin {
+  to {
+    transform: translate(-50%, -50%) rotate(360deg);
+  }
+}

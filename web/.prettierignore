@@ -1,0 +1,12 @@
+package.json
+node_modules
+dist
+.eslintignore
+*.svg
+*.png
+*.jpeg
+.gitignore
+.prettierignore
+*.lock
+yarn-error.log
+public

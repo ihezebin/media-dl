@@ -1,0 +1,80 @@
+// 宽度 小于 576 为小屏手机 ,很多要特殊处理
+$window-width-mini: 576px;
+
+// 768 为手机,
+$window-width-smaller: 768px;
+$container-width-smaller: 720px;
+
+// 768~992 为平板,
+$window-width-normal: 992px;
+$container-width-normal: 960px;
+
+// 992~1200 为常 14 寸规桌面
+$window-width-larger: 1200px;
+$container-width-larger: 1100px;
+
+// 1550 以上为大屏
+$window-width-huger: 1550px;
+
+// 24寸
+$window-width-biggest: 1920px;
+
+
+// 字体宽度
+$font-weight-bold: 500;
+$font-weight-bolder: 700;
+$font-weight-normal: 400;
+
+// 字体大小
+$font-size-14: 14px;
+$font-size-15: 15px;
+$font-size-16: 16px;
+
+// 字体样式
+$font-family: 'Kaiti SC', 'Songti SC', 'PingFang SC', cursive, sans-serif;
+
+// 功能颜色
+$background-color-white: #fff;
+$background-color-white-reverse: #252d38;
+$background-color-lightgray: #f8fafc;
+$background-color-lightgray-reverse: #181c27;
+$background-color-lightgray-reverse-lighter: #1f3144;
+$link-hover-color-blue: #30a9de;
+$link-hover-color-green: #73d13d;
+$title-color: #3c4858;
+$title-color-reverse: #c4c6c9;
+$subtitle-color: #718096;
+$subtitle-color-reverse: #c4c6c9;
+$text-color: #2c3e50;
+$text-color-reverse: #a7a9ad;
+$text-color-reverse-lighter: #d0d0d0;
+
+// 滚动条颜色
+$scrollbar-color: #c4c6c9;
+$scrollbar-hover-color: #a6a6a6;
+$scrollbar-color-reverse: #687582;
+$scrollbar-hover-color-reverse: #9da8b3;
+
+
+// 颜色
+$color-blue: #007bff;
+$color-indigo: #6610f2;
+$color-purple: #6f42c1;
+$color-pink: #e83e8c;
+$color-red: #dc3545;
+$color-orange: #fd7e14;
+$color-yellow: #ffc107;
+$color-green: #28a745;
+$color-teal: #20c997;
+$color-cyan: #17a2b8;
+$color-white: #fff;
+$color-gray: #6c757d;
+$color-gray-dark: #343a40;
+$color-primary: #007bff;
+$color-secondary: #6c757d;
+$color-success: #28a745;
+$color-info: #17a2b8;
+$color-warning: #ffc107;
+$color-danger: #dc3545;
+$color-light: #f8f9fa;
+$color-dark: #343a40;

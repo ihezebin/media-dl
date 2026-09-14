@@ -1,0 +1,27 @@
+.root {
+  position: relative;
+  flex: 1;
+  width: 100%;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+}
+
+.fullscreen {
+  height: 100vh;
+  height: 100dvh;
+  background: var(--app-shell-bg);
+}
+
+.content {
+  position: relative;
+  z-index: 1;
+  width: min(100%, 560px);
+  min-height: 420px;
+  display: flex;
+  flex-direction: column;
+}

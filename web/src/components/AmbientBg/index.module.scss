@@ -1,0 +1,95 @@
+.root {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+  z-index: 0;
+}
+
+.orb {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(8px);
+  opacity: 0.7;
+  animation: ambientDrift 14s ease-in-out infinite;
+}
+
+.orbA {
+  width: min(42vw, 360px);
+  height: min(42vw, 360px);
+  top: -8%;
+  right: -4%;
+  background: radial-gradient(circle at 30% 30%, var(--app-orb-a), transparent 68%);
+}
+
+.orbB {
+  width: min(48vw, 420px);
+  height: min(48vw, 420px);
+  bottom: -16%;
+  left: -8%;
+  background: radial-gradient(circle at 60% 40%, var(--app-orb-b), transparent 70%);
+  animation-delay: -6s;
+  animation-duration: 18s;
+}
+
+.mesh {
+  position: absolute;
+  inset: 0;
+  opacity: 0.35;
+  background-image:
+    linear-gradient(var(--app-mesh-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--app-mesh-line) 1px, transparent 1px);
+  background-size: 36px 36px;
+  mask-image: radial-gradient(ellipse at center, #000 20%, transparent 75%);
+}
+
+.sidebar .orbA {
+  width: 180px;
+  height: 180px;
+  top: -10%;
+  right: -20%;
+  opacity: 0.55;
+}
+
+.sidebar .orbB {
+  width: 200px;
+  height: 200px;
+  bottom: 10%;
+  left: -30%;
+  opacity: 0.45;
+}
+
+.sidebar .mesh {
+  opacity: 0.28;
+  mask-image: radial-gradient(ellipse at 30% 20%, #000 10%, transparent 70%);
+}
+
+:global(html[theme='dark']) .sidebar .orbA,
+:global(html[theme='dark']) .sidebar .orbB {
+  opacity: 0.35;
+  filter: blur(14px);
+}
+
+:global(html[theme='dark']) .sidebar .mesh {
+  opacity: 0.16;
+}
+
+.page .orbA {
+  width: min(48vw, 420px);
+  height: min(48vw, 420px);
+}
+
+.page .orbB {
+  width: min(52vw, 480px);
+  height: min(52vw, 480px);
+}
+
+@keyframes ambientDrift {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  50% {
+    transform: translate3d(18px, -14px, 0) scale(1.05);
+  }
+}

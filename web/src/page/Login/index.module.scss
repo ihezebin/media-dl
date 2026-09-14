@@ -1,0 +1,433 @@
+.loginPage {
+  position: relative;
+  min-height: 100vh;
+  min-height: 100dvh;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 32px 20px;
+  overflow: hidden;
+  background: var(--app-shell-bg);
+}
+
+.decor {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.ring {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  border: 1px solid color-mix(in srgb, var(--app-accent) 22%, transparent);
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  animation: ringSpin 18s linear infinite;
+}
+
+.ringA {
+  width: min(72vw, 520px);
+  height: min(72vw, 520px);
+  opacity: 0.55;
+}
+
+.ringB {
+  width: min(88vw, 680px);
+  height: min(88vw, 680px);
+  border-style: dashed;
+  border-color: color-mix(in srgb, var(--app-accent-2) 18%, transparent);
+  animation-direction: reverse;
+  animation-duration: 26s;
+  opacity: 0.4;
+}
+
+.floatDot {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--app-grad-primary);
+  box-shadow: 0 0 14px var(--app-shadow-accent);
+  animation: floatDrift 7s ease-in-out infinite;
+}
+
+.dot1 {
+  top: 18%;
+  left: 18%;
+  animation-delay: 0s;
+}
+
+.dot2 {
+  top: 26%;
+  right: 16%;
+  width: 6px;
+  height: 6px;
+  animation-delay: -1.5s;
+  opacity: 0.75;
+}
+
+.dot3 {
+  bottom: 22%;
+  left: 22%;
+  width: 7px;
+  height: 7px;
+  animation-delay: -3s;
+  opacity: 0.65;
+}
+
+.dot4 {
+  bottom: 18%;
+  right: 20%;
+  animation-delay: -4.2s;
+  opacity: 0.8;
+}
+
+.loginPanel {
+  position: relative;
+  z-index: 1;
+  width: min(100%, 420px);
+  padding: 40px 32px 28px;
+  border-radius: 22px;
+  border: 1px solid var(--app-panel-border);
+  background: var(--app-panel-bg);
+  box-shadow: var(--app-card-shadow);
+  backdrop-filter: blur(14px);
+  overflow: hidden;
+  animation: loginEnter 0.75s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.panelGlow {
+  position: absolute;
+  inset: -40% -20% auto;
+  height: 55%;
+  background: radial-gradient(
+    ellipse at center,
+    color-mix(in srgb, var(--app-accent) 22%, transparent),
+    transparent 70%
+  );
+  pointer-events: none;
+  animation: glowPulse 4.5s ease-in-out infinite;
+}
+
+.loginBrand {
+  position: relative;
+  text-align: center;
+  margin-bottom: 28px;
+}
+
+.loginLogoTrack {
+  height: 76px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 10px;
+}
+
+.loginLogoWrap {
+  width: 68px;
+  height: 68px;
+  display: grid;
+  place-items: center;
+  border-radius: 18px;
+  background: var(--app-btn-fill-hover);
+  border: 1px solid var(--app-line-strong);
+  box-shadow: 0 8px 24px var(--app-shadow-accent);
+  animation: loginLogoPlay 2.4s ease-in-out infinite;
+  transform-origin: center center;
+  will-change: transform;
+}
+
+.loginLogo {
+  width: 36px;
+  height: 36px;
+  display: block;
+}
+
+.loginBrandMark {
+  margin: 0 0 10px;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0;
+  font-size: 13px;
+  font-weight: 650;
+  letter-spacing: 0.22em;
+  padding-left: 0.22em;
+  color: var(--app-accent);
+}
+
+.brandChar {
+  display: inline-block;
+  opacity: 0;
+  animation: brandCharIn 0.55s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.loginTitle {
+  margin: 0 0 8px;
+  font-size: 30px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  line-height: 1.2;
+  background: var(--app-brand-grad);
+  background-size: 160% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation:
+    loginTitleShine 4s ease-in-out infinite,
+    titleFloat 3.6s ease-in-out infinite;
+}
+
+.loginSubtitle {
+  margin: 0;
+  font-size: 14px;
+  color: var(--app-muted);
+  line-height: 1.5;
+  animation: fadeUp 0.6s ease 0.35s both;
+}
+
+.loginForm {
+  position: relative;
+
+  :global(.ant-input-affix-wrapper),
+  :global(.ant-input-password) {
+    border-radius: 12px;
+    border-color: var(--app-line);
+    background: var(--app-surface);
+    padding-block: 8px;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03);
+    transition:
+      border-color 0.2s ease,
+      box-shadow 0.2s ease,
+      transform 0.2s ease;
+  }
+
+  :global(.ant-input-affix-wrapper:hover),
+  :global(.ant-input-password:hover) {
+    transform: translateY(-1px);
+  }
+
+  :global(.ant-input-affix-wrapper:hover),
+  :global(.ant-input-password:hover),
+  :global(.ant-input-affix-wrapper-focused),
+  :global(.ant-input-affix-wrapper:focus-within) {
+    border-color: var(--app-line-strong) !important;
+    box-shadow: 0 0 0 3px var(--app-shadow-accent);
+  }
+}
+
+.fieldEnter {
+  opacity: 0;
+  animation: fadeUp 0.55s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.loginInputIcon {
+  color: var(--app-accent);
+}
+
+.loginSubmitItem {
+  margin-bottom: 12px;
+  margin-top: 8px;
+}
+
+.loginSubmit {
+  position: relative;
+  overflow: hidden;
+  height: 46px;
+  border-radius: 12px;
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+}
+
+.submitShine {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    110deg,
+    transparent 20%,
+    rgba(255, 255, 255, 0.35) 45%,
+    transparent 70%
+  );
+  transform: translateX(-120%);
+  pointer-events: none;
+}
+
+.primaryBtn:global(.ant-btn-primary) {
+  border: none;
+  background: var(--app-grad-primary);
+  box-shadow: 0 2px 8px var(--app-shadow-accent);
+  transform: scale(1);
+  transition:
+    transform 0.18s ease,
+    box-shadow 0.18s ease,
+    background 0.18s ease;
+
+  &:hover,
+  &:focus {
+    border: none !important;
+    background: var(--app-grad-primary-hover) !important;
+    box-shadow: 0 6px 18px var(--app-shadow-accent);
+    transform: scale(1.03);
+
+    .submitShine {
+      animation: shineSweep 0.85s ease;
+    }
+  }
+
+  &:active {
+    background: var(--app-grad-primary) !important;
+    transform: scale(1);
+  }
+}
+
+.loginHint {
+  margin: 0;
+  text-align: center;
+  font-size: 12px;
+  color: var(--app-faint);
+  letter-spacing: 0.02em;
+  animation: fadeUp 0.55s ease 0.85s both;
+}
+
+@keyframes loginEnter {
+  from {
+    opacity: 0;
+    transform: translateY(22px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes fadeUp {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes brandCharIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* 居中原地：轻跳 + 抖动，无左右位移 */
+@keyframes loginLogoPlay {
+  0%,
+  100% {
+    transform: translateY(0) rotate(0deg) scale(1);
+  }
+  12% {
+    transform: translateY(-10px) rotate(0deg) scale(1.05);
+  }
+  22% {
+    transform: translateY(0) rotate(0deg) scale(1);
+  }
+  32% {
+    transform: translateY(-4px) rotate(-5deg) scale(1.02);
+  }
+  40% {
+    transform: translateY(0) rotate(5deg) scale(1);
+  }
+  48% {
+    transform: translateY(-2px) rotate(-4deg) scale(1.01);
+  }
+  56% {
+    transform: translateY(0) rotate(3deg) scale(1);
+  }
+  64% {
+    transform: translateY(0) rotate(-2deg) scale(1);
+  }
+  72% {
+    transform: translateY(0) rotate(0deg) scale(1);
+  }
+}
+
+@keyframes loginTitleShine {
+  0%,
+  100% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+}
+
+@keyframes titleFloat {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-2px);
+  }
+}
+
+@keyframes glowPulse {
+  0%,
+  100% {
+    opacity: 0.55;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.95;
+    transform: scale(1.06);
+  }
+}
+
+@keyframes ringSpin {
+  to {
+    transform: translate(-50%, -50%) rotate(360deg);
+  }
+}
+
+@keyframes floatDrift {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0);
+  }
+  50% {
+    transform: translate3d(10px, -14px, 0);
+  }
+}
+
+@keyframes shineSweep {
+  from {
+    transform: translateX(-120%);
+  }
+  to {
+    transform: translateX(120%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .loginPanel,
+  .loginLogoWrap,
+  .loginTitle,
+  .brandChar,
+  .fieldEnter,
+  .loginSubtitle,
+  .loginHint,
+  .ring,
+  .floatDot,
+  .panelGlow {
+    animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+  }
+}

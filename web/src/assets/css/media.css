@@ -1,0 +1,16 @@
+@media screen and (max-width: 576px) {
+  /*540*/
+}
+
+@media screen and (min-width: 768px) and (max-width: 992px) {
+  /*720*/
+}
+
+@media screen and (min-width: 992px) and (max-width: 1200px) {
+  /*960*/
+}
+
+@media screen and (min-width: 1200px) {
+  /*1100*/
+}
+

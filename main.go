@@ -1,26 +1,29 @@
 package main
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
 	"os"
+	"strings"
 
 	"github.com/spf13/cobra"
 
-	"github.com/hezebin/media-dl/internal/downloader"
-	"github.com/hezebin/media-dl/internal/extractor"
 	"github.com/hezebin/media-dl/internal/httpx"
-	"github.com/hezebin/media-dl/internal/model"
+	"github.com/hezebin/media-dl/internal/music"
+	"github.com/hezebin/media-dl/internal/video/downloader"
+	"github.com/hezebin/media-dl/internal/video/extractor"
+	"github.com/hezebin/media-dl/internal/video/model"
 
-	_ "github.com/hezebin/media-dl/internal/extractor/bilibili"
-	_ "github.com/hezebin/media-dl/internal/extractor/douyin"
-	_ "github.com/hezebin/media-dl/internal/extractor/iqiyi"
-	_ "github.com/hezebin/media-dl/internal/extractor/tencent"
-	_ "github.com/hezebin/media-dl/internal/extractor/weibo"
-	_ "github.com/hezebin/media-dl/internal/extractor/xiaohongshu"
-	_ "github.com/hezebin/media-dl/internal/extractor/xigua"
-	_ "github.com/hezebin/media-dl/internal/extractor/youku"
+	_ "github.com/hezebin/media-dl/internal/video/extractor/bilibili"
+	_ "github.com/hezebin/media-dl/internal/video/extractor/douyin"
+	_ "github.com/hezebin/media-dl/internal/video/extractor/iqiyi"
+	_ "github.com/hezebin/media-dl/internal/video/extractor/tencent"
+	_ "github.com/hezebin/media-dl/internal/video/extractor/weibo"
+	_ "github.com/hezebin/media-dl/internal/video/extractor/xiaohongshu"
+	_ "github.com/hezebin/media-dl/internal/video/extractor/xigua"
+	_ "github.com/hezebin/media-dl/internal/video/extractor/youku"
 )
 
 var (
@@ -31,51 +34,19 @@ var (
 	flagCookies string
 	flagCookie  string
 	flagProxy   string
+
+	flagMusicPlatforms []string
+	flagMusicArtist    string
+	flagMusicTitle     string
+	flagMusicLimit     int
+	flagMusicOutput    string
+	flagMusicName      string
+	flagMusicCover     bool
+	flagMusicLyrics    bool
 )
 
 func main() {
-	root := &cobra.Command{
-		Version:       "1.0.0",
-		Use:           "media-dl",
-		Short:         "解析并下载多平台视频",
-		SilenceUsage:  true,
-		SilenceErrors: true,
-		Long: `media-dl 从分享链接（含短链）解析视频信息并下载。
-
-必须显式指定平台: douyin | bilibili | xiaohongshu | weibo | youku | iqiyi | xigua | tencent
-（别名: dy / bili / xhs / wb / yk / iq / 西瓜 / qq）
-
-示例:
-  media-dl info douyin "https://v.douyin.com/xxx"
-  media-dl download bilibili "https://www.bilibili.com/video/BVxxx" -f mp4
-  media-dl dl xhs "https://www.xiaohongshu.com/explore/xxx" --cover
-  media-dl info tencent "https://v.qq.com/x/page/xxx.html"`,
-	}
-
-	root.PersistentFlags().StringVar(&flagProxy, "proxy", "", "HTTP/HTTPS 代理，如 http://127.0.0.1:7890")
-	root.PersistentFlags().StringVar(&flagCookies, "cookies", "", "Netscape cookies.txt 路径（B 站 412 / 小红书 / 西瓜 / 腾讯 VIP 等建议）")
-	root.PersistentFlags().StringVar(&flagCookie, "cookie", "", "直接传入 Cookie 头字符串")
-
-	infoCmd := &cobra.Command{
-		Use:   "info <platform> <url>",
-		Short: "只解析视频信息，输出统一 JSON（不下载）",
-		Args:  cobra.ExactArgs(2),
-		RunE:  runInfo,
-	}
-
-	dlCmd := &cobra.Command{
-		Use:     "download <platform> <url>",
-		Aliases: []string{"dl"},
-		Short:   "解析并下载视频",
-		Args:    cobra.ExactArgs(2),
-		RunE:    runDownload,
-	}
-	dlCmd.Flags().StringVarP(&flagOutput, "output", "o", ".", "保存目录")
-	dlCmd.Flags().StringVarP(&flagFormat, "format", "f", "mp4", "输出容器格式 (mp4/mkv/...)")
-	dlCmd.Flags().StringVarP(&flagName, "name", "n", "", "输出文件名（不含扩展名）")
-	dlCmd.Flags().BoolVar(&flagCover, "cover", false, "同时下载封面图")
-
-	root.AddCommand(infoCmd, dlCmd)
+	root := newRootCommand()
 	if err := root.Execute(); err != nil {
 		var printed jsonPrintedError
 		if !errors.As(err, &printed) {
@@ -83,6 +54,100 @@ func main() {
 		}
 		os.Exit(1)
 	}
+}
+
+func newRootCommand() *cobra.Command {
+	root := &cobra.Command{
+		Version:       "1.0.0",
+		Use:           "media-dl",
+		Short:         "解析并下载多平台视频和音乐",
+		SilenceUsage:  true,
+		SilenceErrors: true,
+		Long: `media-dl 按视频和音乐两个业务域提供解析、搜索和下载能力。
+
+视频:
+  media-dl video info douyin "https://v.douyin.com/xxx"
+  media-dl video download bilibili "https://www.bilibili.com/video/BVxxx" -f mp4
+
+音乐:
+  media-dl music search --artist "周杰伦" --title "晴天"
+  media-dl music download netease "https://music.163.com/#/song?id=123456"`,
+	}
+
+	root.PersistentFlags().StringVar(&flagProxy, "proxy", "", "video/music 共用的 HTTP/HTTPS 代理，如 http://127.0.0.1:7890")
+	root.PersistentFlags().StringVar(&flagCookies, "cookies", "", "video/music 共用的 Netscape cookies.txt 路径")
+	root.PersistentFlags().StringVar(&flagCookie, "cookie", "", "video/music 共用的直接 Cookie 头字符串")
+
+	root.AddCommand(newVideoCommand(), newMusicCommand())
+	return root
+}
+
+func newVideoCommand() *cobra.Command {
+	videoCmd := &cobra.Command{
+		Use:     "video",
+		Aliases: []string{"v"},
+		Short:   "视频解析和下载",
+		Args:    cobra.NoArgs,
+	}
+
+	infoCmd := &cobra.Command{
+		Use:   "info <platform> <url>",
+		Short: "只解析视频信息，输出统一 JSON（不下载）",
+		Args:  cobra.ExactArgs(2),
+		RunE:  runVideoInfo,
+	}
+
+	dlCmd := &cobra.Command{
+		Use:     "download <platform> <url>",
+		Aliases: []string{"dl"},
+		Short:   "解析并下载视频",
+		Args:    cobra.ExactArgs(2),
+		RunE:    runVideoDownload,
+	}
+	dlCmd.Flags().StringVarP(&flagOutput, "output", "o", ".", "保存目录")
+	dlCmd.Flags().StringVarP(&flagFormat, "format", "f", "mp4", "输出容器格式 (mp4/mkv/...)")
+	dlCmd.Flags().StringVarP(&flagName, "name", "n", "", "输出文件名（不含扩展名）")
+	dlCmd.Flags().BoolVar(&flagCover, "cover", false, "同时下载封面图")
+
+	videoCmd.AddCommand(infoCmd, dlCmd)
+	return videoCmd
+}
+
+func newMusicCommand() *cobra.Command {
+	musicCmd := &cobra.Command{
+		Use:     "music",
+		Aliases: []string{"m"},
+		Short:   "音乐搜索和下载",
+		Args:    cobra.NoArgs,
+	}
+
+	musicSearchCmd := &cobra.Command{
+		Use:     "search [keyword]",
+		Aliases: []string{"s"},
+		Short:   "搜索歌曲（默认搜索全部音乐平台）",
+		Args:    cobra.MaximumNArgs(1),
+		RunE:    runMusicSearch,
+	}
+	musicSearchCmd.Flags().StringSliceVarP(&flagMusicPlatforms, "platform", "p", nil, "指定音乐平台，可逗号分隔；不传则搜索全部平台")
+	musicSearchCmd.Flags().StringVarP(&flagMusicArtist, "artist", "a", "", "歌手名")
+	musicSearchCmd.Flags().StringVar(&flagMusicArtist, "singer", "", "歌手名（--artist 的别名）")
+	musicSearchCmd.Flags().StringVarP(&flagMusicTitle, "title", "t", "", "歌曲名")
+	musicSearchCmd.Flags().IntVarP(&flagMusicLimit, "limit", "l", 10, "每个平台最多返回结果数")
+
+	musicDownloadCmd := &cobra.Command{
+		Use:     "download <platform> <url>",
+		Aliases: []string{"dl"},
+		Short:   "解析并下载歌曲",
+		Args:    cobra.ExactArgs(2),
+		RunE:    runMusicDownload,
+	}
+	musicDownloadCmd.Flags().StringVarP(&flagMusicOutput, "output", "o", "./downloads", "保存目录")
+	musicDownloadCmd.Flags().StringVarP(&flagMusicName, "name", "n", "", "输出文件名（不含扩展名）")
+	musicDownloadCmd.Flags().BoolVar(&flagMusicCover, "cover", false, "同时下载封面图")
+	musicDownloadCmd.Flags().BoolVar(&flagMusicLyrics, "lyrics", false, "同时下载歌词文件")
+
+	musicCmd.AddCommand(musicSearchCmd, musicDownloadCmd)
+	return musicCmd
 }
 
 // jsonPrintedError 表示失败 JSON 已写到 stdout，无需再往 stderr 打 Error:。
@@ -105,6 +170,9 @@ func newClient() (*httpx.Client, error) {
 			"douyin.com", "bilibili.com", "xiaohongshu.com",
 			"weibo.com", "weibo.cn", "youku.com", "tudou.com",
 			"iqiyi.com", "iq.com", "ixigua.com", "toutiao.com", "qq.com",
+			"kugou.com", "5sing.kugou.com", "kuwo.cn", "migu.cn",
+			"music.163.com", "qqmusic.qq.com", "qishui.com",
+			"apple.com", "music.apple.com",
 		} {
 			cookies = append(cookies, httpx.ParseCookieHeader(flagCookie, domain)...)
 		}
@@ -115,7 +183,7 @@ func newClient() (*httpx.Client, error) {
 	})
 }
 
-func runInfo(_ *cobra.Command, args []string) error {
+func runVideoInfo(_ *cobra.Command, args []string) error {
 	platform, rawURL := args[0], args[1]
 	canon, _ := extractor.NormalizePlatform(platform)
 	if canon == "" {
@@ -149,7 +217,7 @@ func runInfo(_ *cobra.Command, args []string) error {
 	return nil
 }
 
-func runDownload(_ *cobra.Command, args []string) error {
+func runVideoDownload(_ *cobra.Command, args []string) error {
 	platform, rawURL := args[0], args[1]
 	client, err := newClient()
 	if err != nil {
@@ -177,6 +245,106 @@ func runDownload(_ *cobra.Command, args []string) error {
 		fmt.Fprintf(os.Stderr, "封面: %s\n", res.CoverPath)
 	}
 	return nil
+}
+
+func runMusicSearch(_ *cobra.Command, args []string) error {
+	if err := music.ConfigureProxy(flagProxy); err != nil {
+		return err
+	}
+	cookie, err := musicCookie()
+	if err != nil {
+		return err
+	}
+	keyword := ""
+	if len(args) == 1 {
+		keyword = args[0]
+	}
+	resp, searchErr := music.New(cookie).Search(music.SearchOptions{
+		Keyword:   keyword,
+		Artist:    flagMusicArtist,
+		Title:     flagMusicTitle,
+		Platforms: flagMusicPlatforms,
+		Limit:     flagMusicLimit,
+	})
+	if resp == nil {
+		return searchErr
+	}
+	data, err := json.MarshalIndent(resp, "", "  ")
+	if err != nil {
+		return err
+	}
+	fmt.Println(string(data))
+	if searchErr != nil {
+		return jsonPrintedError{searchErr}
+	}
+	return nil
+}
+
+func runMusicDownload(_ *cobra.Command, args []string) error {
+	if err := music.ConfigureProxy(flagProxy); err != nil {
+		return err
+	}
+	cookie, err := musicCookie()
+	if err != nil {
+		return err
+	}
+	client, err := newClient()
+	if err != nil {
+		return err
+	}
+	platform, err := music.NormalizePlatform(args[0])
+	if err != nil {
+		return err
+	}
+	service := music.New(cookie)
+	fmt.Fprintln(os.Stderr, "解析音乐链接...")
+	song, err := service.Parse(client, platform, args[1])
+	if err != nil {
+		return err
+	}
+	fmt.Fprintf(os.Stderr, "平台: %s\n", song.Source)
+	fmt.Fprintf(os.Stderr, "歌曲: %s\n", song.Name)
+	if song.Artist != "" {
+		fmt.Fprintf(os.Stderr, "歌手: %s\n", song.Artist)
+	}
+
+	result, err := service.Download(client, song, music.DownloadOptions{
+		OutputDir:      flagMusicOutput,
+		Filename:       flagMusicName,
+		DownloadCover:  flagMusicCover,
+		DownloadLyrics: flagMusicLyrics,
+	})
+	if err != nil {
+		return err
+	}
+	fmt.Fprintf(os.Stderr, "完成: %s\n", result.AudioPath)
+	if result.CoverPath != "" {
+		fmt.Fprintf(os.Stderr, "封面: %s\n", result.CoverPath)
+	}
+	if result.LyricsPath != "" {
+		fmt.Fprintf(os.Stderr, "歌词: %s\n", result.LyricsPath)
+	}
+	return nil
+}
+
+func musicCookie() (string, error) {
+	parts := make([]string, 0, 2)
+	if value := strings.TrimSpace(flagCookie); value != "" {
+		parts = append(parts, value)
+	}
+	if flagCookies != "" {
+		cookies, err := downloader.LoadCookiesFile(flagCookies)
+		if err != nil {
+			return "", fmt.Errorf("读取 cookies 文件失败: %w", err)
+		}
+		for _, cookie := range cookies {
+			if cookie == nil || cookie.Name == "" {
+				continue
+			}
+			parts = append(parts, cookie.Name+"="+cookie.Value)
+		}
+	}
+	return strings.Join(parts, "; "), nil
 }
 
 func printInfoBrief(info *model.VideoInfo) {

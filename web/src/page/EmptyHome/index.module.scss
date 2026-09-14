@@ -1,0 +1,277 @@
+.emptyHome {
+  --empty-ink: var(--app-ink);
+  --empty-muted: var(--app-muted);
+  --empty-accent: var(--app-accent);
+
+  position: relative;
+  flex: 1;
+  width: 100%;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: clamp(24px, 5vw, 48px);
+  background: transparent;
+}
+
+.emptyHomePanel {
+  position: relative;
+  z-index: 1;
+  width: min(100%, 560px);
+  text-align: center;
+  animation: emptyHomeEnter 0.7s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.emptyHomeBrandBlock {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  margin: 0 auto 18px;
+  width: min(100%, 420px);
+}
+
+.emptyHomeLogoTrack {
+  width: 100%;
+  height: 72px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: visible;
+}
+
+.emptyHomeLogo {
+  width: 64px;
+  height: 64px;
+  display: block;
+  transform-origin: center center;
+  will-change: transform;
+  animation: emptyHomeLogoPlay 13s linear infinite;
+}
+
+.emptyHomeBrand {
+  margin: 0;
+  font-size: clamp(40px, 6vw, 56px);
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  padding-left: 0.14em;
+  text-align: center;
+  line-height: 1;
+  background: var(--app-brand-grad);
+  background-size: 160% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  will-change: transform, background-position;
+  animation:
+    emptyHomeBrandShine 4s ease-in-out infinite,
+    emptyHomeBrandShake 3.4s ease-in-out infinite;
+}
+
+.emptyHomeTitle {
+  margin: 0 0 12px;
+  font-size: clamp(20px, 2.6vw, 28px);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  line-height: 1.6;
+  color: var(--empty-ink);
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.emptyHomeTitleChar {
+  display: inline-block;
+  animation: emptyHomeTitleBounce 2.2s ease-in-out infinite;
+  will-change: transform;
+}
+
+@keyframes emptyHomeTitleBounce {
+  0%,
+  12%,
+  100% {
+    transform: translateY(0);
+  }
+  6% {
+    transform: translateY(-0.38em);
+  }
+}
+
+.emptyHomeDesc {
+  margin: 0 auto 28px;
+  max-width: 28em;
+  font-size: 15px;
+  line-height: 1.75;
+  color: var(--empty-muted);
+}
+
+.emptyHomeActions {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 36px;
+}
+
+.emptyHomeCta {
+  min-width: 168px;
+  height: 44px;
+  padding-inline: 28px;
+  font-size: 16px;
+}
+
+.primaryBtn:global(.ant-btn-primary) {
+  border: none;
+  background: var(--app-grad-primary);
+  box-shadow: 0 2px 8px var(--app-shadow-accent);
+  transform: scale(1);
+  transition:
+    transform 0.18s ease,
+    box-shadow 0.18s ease,
+    background 0.18s ease;
+
+  &:hover,
+  &:focus {
+    border: none !important;
+    background: var(--app-grad-primary-hover) !important;
+    box-shadow: 0 4px 12px var(--app-shadow-accent);
+    transform: scale(1.04);
+  }
+
+  &:active {
+    background: var(--app-grad-primary) !important;
+    transform: scale(1.02);
+  }
+}
+
+.emptyHomeHint {
+  margin: 0;
+  font-size: 13px;
+  color: var(--app-faint);
+}
+
+.emptyHomeSteps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 10px 0;
+}
+
+.emptyHomeStep {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  min-width: 108px;
+  padding: 0 10px;
+}
+
+.emptyHomeStepIndex {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  color: var(--empty-accent);
+}
+
+.emptyHomeStepLabel {
+  font-size: 13px;
+  color: var(--app-muted);
+  white-space: nowrap;
+}
+
+.emptyHomeStepSep {
+  width: 36px;
+  height: 1px;
+  margin: 0 4px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    color-mix(in srgb, var(--app-accent) 35%, transparent),
+    transparent
+  );
+}
+
+@keyframes emptyHomeEnter {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes emptyHomeLogoPlay {
+  0% {
+    transform: translate3d(0, 0, 0) rotate(0deg);
+  }
+  1.9% {
+    transform: translate3d(0, -14px, 0) rotate(0deg);
+  }
+  3.8%,
+  19.2% {
+    transform: translate3d(0, 0, 0) rotate(0deg);
+  }
+  34.6% {
+    transform: translate3d(140px, 0, 0) rotate(300deg);
+  }
+  50% {
+    transform: translate3d(0, 0, 0) rotate(0deg);
+  }
+  51.9% {
+    transform: translate3d(0, -14px, 0) rotate(0deg);
+  }
+  53.8%,
+  69.2% {
+    transform: translate3d(0, 0, 0) rotate(0deg);
+  }
+  84.6% {
+    transform: translate3d(-140px, 0, 0) rotate(-300deg);
+  }
+  100% {
+    transform: translate3d(0, 0, 0) rotate(0deg);
+  }
+}
+
+@keyframes emptyHomeBrandShine {
+  0%,
+  100% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+}
+
+@keyframes emptyHomeBrandShake {
+  0%,
+  86%,
+  100% {
+    transform: translate3d(0, 0, 0) rotate(0deg);
+  }
+  88% {
+    transform: translate3d(-3px, 0, 0) rotate(-1.4deg);
+  }
+  90% {
+    transform: translate3d(3px, 1px, 0) rotate(1.2deg);
+  }
+  92% {
+    transform: translate3d(-2px, -1px, 0) rotate(-0.9deg);
+  }
+  94% {
+    transform: translate3d(2px, 0, 0) rotate(0.8deg);
+  }
+  96% {
+    transform: translate3d(-1px, 0, 0) rotate(-0.4deg);
+  }
+  98% {
+    transform: translate3d(0, 0, 0) rotate(0deg);
+  }
+}
