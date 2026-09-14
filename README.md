@@ -75,7 +75,7 @@ MEDIA_DL_PORT=8090 MEDIA_DL_PROXY=http://host.docker.internal:7890 make docker-u
 
 ## 服务器 Docker 镜像 tag 部署
 
-服务端不需要拉取或编译源代码，只运行镜像仓库中的 tag。默认镜像地址为 `ghcr.io/ihezebin/media-dl`，可以通过 `IMAGE_REPOSITORY` 覆盖。镜像内已经包含 Go 后端和编译后的 `webui` 前端，由同一个 `media-dl server` 进程提供服务。
+服务端不需要拉取或编译源代码，只运行镜像仓库中的 tag。默认镜像地址为腾讯云 `ccr.ccs.tencentyun.com/hezebin/media-dl`，可以通过 `DOCKER_REGISTRY`、`DOCKER_NAMESPACE` 或 `IMAGE_REPOSITORY` 覆盖。镜像内已经包含 Go 后端和编译后的 `webui` 前端，由同一个 `media-dl server` 进程提供服务。
 
 ### 1. `make package` 构建并推送镜像
 
@@ -83,14 +83,14 @@ MEDIA_DL_PORT=8090 MEDIA_DL_PROXY=http://host.docker.internal:7890 make docker-u
 
 ```bash
 git checkout v0.1.0
-docker login ghcr.io
+docker login ccr.ccs.tencentyun.com
 make package
 ```
 
 `make package` 会读取当前仓库 tag 作为镜像 tag：
 
 ```text
-ghcr.io/ihezebin/media-dl:v0.1.0
+ccr.ccs.tencentyun.com/hezebin/media-dl:v0.1.0
 ```
 
 它会完成前端构建、后端构建、Docker 镜像构建和推送。当前提交没有 Git tag 时，会使用 Git 提交号作为 tag；生产部署建议使用 GitHub 仓库中已经存在的版本 tag。构建架构默认是 `linux/amd64`，可通过 `DOCKER_PLATFORM` 覆盖。只构建不推送时使用 `make package-local`。
@@ -98,6 +98,7 @@ ghcr.io/ihezebin/media-dl:v0.1.0
 如果不想提前执行 `docker login`，也可以把镜像仓库账号和访问令牌交给 Makefile，由它自动完成登录：
 
 ```bash
+DOCKER_REGISTRY=ccr.ccs.tencentyun.com \
 DOCKER_USER=<账号> \
 DOCKER_PWD=<访问令牌> \
 make package
@@ -115,10 +116,10 @@ MEDIA_DL_COOKIE=
 MEDIA_DL_COOKIES=
 ```
 
-`MEDIA_DL_TAG` 使用 GitHub 仓库中发布的 tag，并且必须与 `make package` 推送的镜像 tag 一致。私有 GHCR 仓库需要先在服务器登录：
+`MEDIA_DL_TAG` 使用 GitHub 仓库中发布的 tag，并且必须与 `make package` 推送的镜像 tag 一致。私有腾讯云仓库需要先在服务器登录：
 
 ```bash
-docker login ghcr.io
+docker login ccr.ccs.tencentyun.com
 docker compose pull
 docker compose up -d
 docker compose ps

@@ -1,6 +1,6 @@
 services:
   media-dl:
-    image: "${MEDIA_DL_IMAGE:-ghcr.io/ihezebin/media-dl}:${MEDIA_DL_TAG:?MEDIA_DL_TAG is required; use a GitHub repository tag such as v0.1.0}"
+    image: "${MEDIA_DL_IMAGE:-ccr.ccs.tencentyun.com/hezebin/media-dl}:${MEDIA_DL_TAG:?MEDIA_DL_TAG is required; use a GitHub repository tag such as v0.1.0}"
     restart: unless-stopped
     pull_policy: always
     ports:

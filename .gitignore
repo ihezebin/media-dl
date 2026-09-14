@@ -6,14 +6,6 @@
 
 # Downloads / local
 /downloads/
-*.mp4
-*.mkv
-*.flv
-*.m4s
-*.part
-*.tmp
-*.jpg
-*.png
 
 # IDE / OS
 .DS_Store

@@ -1,8 +1,10 @@
 APP ?= media-dl
 PORT ?= 8080
 TAG ?= $(shell git describe --tags --always)
-DOCKER_REGISTRY ?= ghcr.io
-DOCKER_NAMESPACE ?= ihezebin
+# 腾讯云容器镜像服务：ccr.ccs.tencentyun.com；可通过 HEZEBIN_DOCKER_REGISTRY 覆盖
+HEZEBIN_DOCKER_REGISTRY ?= ccr.ccs.tencentyun.com
+DOCKER_REGISTRY ?= $(HEZEBIN_DOCKER_REGISTRY)
+DOCKER_NAMESPACE ?= hezebin
 IMAGE_REPOSITORY ?= $(DOCKER_REGISTRY)/$(DOCKER_NAMESPACE)/$(APP)
 IMAGE ?= $(IMAGE_REPOSITORY):$(TAG)
 DOCKER_PLATFORM ?= linux/amd64
