@@ -31,6 +31,19 @@ go run . server --port 8080 --web-dir ./webui/dist --output ./downloads
 
 失败时 `code` 非 0，具体原因在 `message`。
 
+## WebUI 验证码
+
+WebUI 点击视频页的“提取视频”或音乐页的“搜索”时，会先调用 `GET /api/captcha` 获取随机的 Slide、Drag-Drop 或 Rotate 挑战，再将操作结果提交到 `POST /api/captcha/verify`。验证成功后服务签发短期 token，WebUI 通过 `X-Captcha-Token` 请求头传给受保护接口。
+
+验证码挑战和凭证仅保存在当前服务进程的内存中，不依赖 Redis 或其他中间件。WebUI 不使用 Cookie 或 localStorage 保存 token，刷新页面后需要重新验证。
+
+WebUI 使用以下受保护接口：
+
+- `POST /api/music/search/verified`
+- `POST /api/video/info/verified`
+
+原有的 `POST /api/music/search` 和 `POST /api/video/info` 保留不变，继续作为不带 WebUI 行为验证的 HTTP API 能力提供给调用方。
+
 ## 音乐 API
 
 音乐平台适配由 [guohuiyuan/music-lib](https://github.com/guohuiyuan/music-lib) 提供。平台值为 `netease`、`qq`、`kugou`、`kuwo`、`migu`、`fivesing`、`qianqian`、`soda`、`jamendo`、`joox`、`bilibili`、`apple`。

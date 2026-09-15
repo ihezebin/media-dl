@@ -41,10 +41,11 @@ type Config struct {
 }
 
 type Server struct {
-	app       appServer
-	config    Config
-	outputDir string
-	webDir    string
+	app          appServer
+	config       Config
+	outputDir    string
+	webDir       string
+	captchaStore *behaviorCaptchaStore
 }
 
 type appServer interface {
@@ -75,6 +76,10 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 	if err := music.ConfigureProxy(cfg.Proxy); err != nil {
 		return nil, err
 	}
+	captchaStore, err := newBehaviorCaptchaStore()
+	if err != nil {
+		return nil, err
+	}
 	app, err := olympus.NewServer(
 		ctx,
 		olympus.WithPort(cfg.Port),
@@ -86,7 +91,7 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 		return nil, err
 	}
 
-	server := &Server{app: app, config: cfg, outputDir: outputDir, webDir: webDir}
+	server := &Server{app: app, config: cfg, outputDir: outputDir, webDir: webDir, captchaStore: captchaStore}
 	app.RegisterRoutes(server)
 	if err := app.RegisterOpenAPIUI("/openapi", olympus.StoplightUI); err != nil {
 		return nil, fmt.Errorf("注册 OpenAPI 文档失败: %w", err)
@@ -102,11 +107,15 @@ func (s *Server) Run(ctx context.Context) error {
 func (s *Server) RegisterRoutes(router olympus.Router) {
 	api := router.Group("/api")
 	api.GET("/music/platforms", olympus.NewHandler(s.musicPlatforms))
+	api.GET("/captcha", olympus.NewHandler(s.captcha))
+	api.POST("/captcha/verify", olympus.NewHandler(s.captchaVerify))
 	api.POST("/music/search", olympus.NewHandler(s.musicSearch))
+	api.POST("/music/search/verified", olympus.NewHandler(s.musicSearchVerified))
 	api.POST("/music/resolve", olympus.NewHandler(s.musicResolve))
 	api.POST("/music/lyrics", olympus.NewHandler(s.musicLyrics))
 	api.POST("/music/download", olympus.NewHandler(s.musicDownload))
 	api.POST("/video/info", olympus.NewHandler(s.videoInfo))
+	api.POST("/video/info/verified", olympus.NewHandler(s.videoInfoVerified))
 	api.POST("/video/download", olympus.NewHandler(s.videoDownload))
 }
 
@@ -161,6 +170,13 @@ func (s *Server) musicSearch(_ *gin.Context, req musicSearchRequest) (*music.Sea
 		return response, badRequest(err)
 	}
 	return response, nil
+}
+
+func (s *Server) musicSearchVerified(ctx *gin.Context, req musicSearchRequest) (*music.SearchResponse, error) {
+	if err := s.requireCaptcha(ctx); err != nil {
+		return nil, err
+	}
+	return s.musicSearch(ctx, req)
 }
 
 type musicResolveRequest struct {
@@ -296,6 +312,13 @@ func (s *Server) videoInfo(_ *gin.Context, req videoInfoRequest) (*model.VideoIn
 		return nil, badRequest(err)
 	}
 	return info, nil
+}
+
+func (s *Server) videoInfoVerified(ctx *gin.Context, req videoInfoRequest) (*model.VideoInfo, error) {
+	if err := s.requireCaptcha(ctx); err != nil {
+		return nil, err
+	}
+	return s.videoInfo(ctx, req)
 }
 
 type videoDownloadRequest struct {

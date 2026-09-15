@@ -7,7 +7,8 @@ import { Drawer, Input, message, Select, Slider, Spin, Tooltip } from 'antd'
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { CSSProperties } from 'react'
 
-import { downloadMusicAsset, getMusicLyrics, getMusicPlatforms, proxyURL, resolveMusicSong, searchMusic, type MusicSong } from '../../api/media'
+import { downloadMusicAsset, forgetBehaviorCaptcha, getMusicLyrics, getMusicPlatforms, isCaptchaRequired, proxyURL, resolveMusicSong, searchMusic, type MusicSong } from '../../api/media'
+import { useBehaviorCaptcha } from '../../components/BehaviorCaptcha/useBehaviorCaptcha'
 
 import styles from './index.module.scss'
 
@@ -237,6 +238,7 @@ export default function MusicSearch() {
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const resultsRef = useRef<HTMLElement | null>(null)
   const platformCookiesRef = useRef<Record<string, string>>({})
+  const { captcha, captchaLoading, runWithCaptcha } = useBehaviorCaptcha()
 
   useEffect(() => { getMusicPlatforms().then((result) => { if (result.platforms.length) { setPlatforms(result.platforms); setSelectedPlatforms(result.platforms) } }).catch(() => undefined) }, [])
   useEffect(() => { platformCookiesRef.current = platformCookies }, [platformCookies])
@@ -290,8 +292,13 @@ export default function MusicSearch() {
       const result = await searchMusic({ keyword: keyword.trim(), type, platforms: selectedPlatforms, cookies: platformCookies })
       setSongs(result.results); setSearched(true)
       if (result.errors?.length) message.warning(`${result.errors.length} 个平台搜索失败，已展示可用结果`)
-    } catch (error) { message.error(error instanceof Error ? error.message : '音乐搜索失败'); setSongs([]); setSearched(true) } finally { setLoading(false) }
+    } catch (error) {
+      if (isCaptchaRequired(error)) { forgetBehaviorCaptcha(); runWithCaptcha(search); return }
+      message.error(error instanceof Error ? error.message : '音乐搜索失败'); setSongs([]); setSearched(true)
+    } finally { setLoading(false) }
   }
+
+  const requestSearch = () => runWithCaptcha(search)
 
   const play = async (song: MusicSong) => {
     if (song.is_invalid) { message.warning('该歌曲已标记为无效，无法播放'); return }
@@ -329,7 +336,7 @@ export default function MusicSearch() {
   return <div className={styles.page}>
     <div className={styles.pageIntro}><div className={styles.pageIntroRow}><div><div className={styles.overline}>MUSIC / 02</div><h1>搜索音乐</h1></div><button type="button" className={styles.cookieButton} onClick={openCookieDrawer}><KeyOutlined />平台 Cookie</button></div><p>在多个平台找到同一首歌，选择你喜欢的版本。</p></div>
     <section className={styles.searchPanel}>
-      <div className={styles.searchRow}><div className={styles.searchInput}><SearchOutlined /><input value={keyword} onChange={(event) => setKeyword(event.target.value)} onKeyDown={(event) => event.key === 'Enter' && search()} placeholder="搜索歌曲名、歌手或专辑" aria-label="搜索音乐" /></div><button type="button" className={styles.searchButton} onClick={search} disabled={loading}><SearchOutlined />{loading ? '搜索中' : '搜索'}</button></div>
+      <div className={styles.searchRow}><div className={styles.searchInput}><SearchOutlined /><input value={keyword} onChange={(event) => setKeyword(event.target.value)} onKeyDown={(event) => event.key === 'Enter' && requestSearch()} placeholder="搜索歌曲名、歌手或专辑" aria-label="搜索音乐" /></div><button type="button" className={styles.searchButton} onClick={requestSearch} disabled={loading || captchaLoading}>{loading || captchaLoading ? <><Spin size="small" />{loading ? '搜索中' : '验证中'}</> : <><SearchOutlined />搜索</>}</button></div>
       <div className={styles.searchTypeBlock}>
         <span className={styles.searchTypeLabel}><ControlOutlined />搜索类型</span>
         <div className={styles.searchTypes} role="radiogroup" aria-label="搜索类型">
@@ -373,5 +380,6 @@ export default function MusicSearch() {
       </div>
     </Drawer>
     {playing && <Player song={playing} playing={isPlaying} currentTime={currentTime} duration={duration} lyrics={lyrics} lyricLoading={lyricLoading} volume={volume} muted={muted} playbackRate={playbackRate} onClose={() => setPlaying(null)} onToggle={togglePlaying} onSeek={(value) => { if (audioRef.current) audioRef.current.currentTime = value; setCurrentTime(value) }} onVolumeChange={setVolume} onMuteChange={setMuted} onPlaybackRateChange={setPlaybackRate} />}
+    {captcha}
   </div>
 }

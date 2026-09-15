@@ -1857,6 +1857,13 @@ globalthis@^1.0.4:
     define-properties "^1.2.1"
     gopd "^1.0.1"
 
+go-captcha-react@1.0.5:
+  version "1.0.5"
+  resolved "https://registry.npmjs.org/go-captcha-react/-/go-captcha-react-1.0.5.tgz#029074c7d5a7ed498dd50ab8fda579d66a8ccbfe"
+  integrity sha512-lZ84pfJhGxVvA0gZfPylWAH00cD0VwetQgp6mJ2IFLEaNpkAC8hPK2Q+45gb9zxGYjuqXqQe4sJLCGrHhECJCg==
+  dependencies:
+    classnames "^2.5.1"
+
 gopd@^1.0.1, gopd@^1.2.0:
   version "1.2.0"
   resolved "https://registry.npmjs.org/gopd/-/gopd-1.2.0.tgz#89f56b8217bdbc8802bd299df6d7f1081d7e51a1"

@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/hezebin/media-dl/internal/music"
 )
@@ -28,6 +29,7 @@ func TestServerRoutes(t *testing.T) {
 		want int
 	}{
 		{name: "music platforms", path: "/api/music/platforms", want: http.StatusOK},
+		{name: "captcha", path: "/api/captcha", want: http.StatusOK},
 		{name: "webui", path: "/", want: http.StatusOK},
 		{name: "proxy missing url", path: "/api/proxy", want: http.StatusBadRequest},
 	}
@@ -61,6 +63,28 @@ func TestServerRoutes(t *testing.T) {
 		server.app.Engine().ServeHTTP(resp, req)
 		if resp.Code != http.StatusBadRequest {
 			t.Fatalf("status = %d, want %d; body = %s", resp.Code, http.StatusBadRequest, resp.Body.String())
+		}
+	})
+	t.Run("verified search requires captcha", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodPost, "/api/music/search/verified", nil)
+		resp := httptest.NewRecorder()
+		server.app.Engine().ServeHTTP(resp, req)
+		if resp.Code != http.StatusUnauthorized {
+			t.Fatalf("status = %d, want %d; body = %s", resp.Code, http.StatusUnauthorized, resp.Body.String())
+		}
+	})
+	t.Run("verified search accepts only an issued header token", func(t *testing.T) {
+		token := "test-captcha-token"
+		server.captchaStore.mu.Lock()
+		server.captchaStore.tokens[token] = time.Now().Add(time.Minute)
+		server.captchaStore.mu.Unlock()
+
+		req := httptest.NewRequest(http.MethodPost, "/api/music/search/verified", nil)
+		req.Header.Set("X-Captcha-Token", token)
+		resp := httptest.NewRecorder()
+		server.app.Engine().ServeHTTP(resp, req)
+		if resp.Code != http.StatusBadRequest {
+			t.Fatalf("status = %d, want %d after captcha header was accepted; body = %s", resp.Code, http.StatusBadRequest, resp.Body.String())
 		}
 	})
 }

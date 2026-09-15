@@ -2,7 +2,8 @@ import { CheckCircleFilled, CloudDownloadOutlined, LinkOutlined, PlayCircleFille
 import { message, Spin } from 'antd'
 import { useState } from 'react'
 
-import { downloadVideo, getVideoInfo, proxyURL, type VideoInfo } from '../../api/media'
+import { downloadVideo, forgetBehaviorCaptcha, getVideoInfo, isCaptchaRequired, proxyURL, type VideoInfo } from '../../api/media'
+import { useBehaviorCaptcha } from '../../components/BehaviorCaptcha/useBehaviorCaptcha'
 
 import styles from './index.module.scss'
 
@@ -30,11 +31,20 @@ export default function VideoDownload() {
   const [downloading, setDownloading] = useState(false)
   const [previewError, setPreviewError] = useState(false)
   const [result, setResult] = useState<VideoInfo | null>(null)
+  const { captcha, captchaLoading, runWithCaptcha } = useBehaviorCaptcha()
 
   const parse = async () => {
     if (!url.trim()) { message.warning('请先粘贴视频链接'); return }
     setLoading(true)
-    try { setPreviewError(false); setResult(await getVideoInfo(url.trim())); message.success('视频解析完成') } catch (error) { setResult(null); message.error(error instanceof Error ? error.message : '视频解析失败') } finally { setLoading(false) }
+    try { setPreviewError(false); setResult(await getVideoInfo(url.trim())); message.success('视频解析完成') } catch (error) {
+      if (isCaptchaRequired(error)) { forgetBehaviorCaptcha(); runWithCaptcha(parse); return }
+      setResult(null); message.error(error instanceof Error ? error.message : '视频解析失败')
+    } finally { setLoading(false) }
+  }
+
+  const requestParse = () => {
+    if (!url.trim()) { message.warning('请先粘贴视频链接'); return }
+    runWithCaptcha(parse)
   }
 
   const download = async () => {
@@ -47,7 +57,7 @@ export default function VideoDownload() {
     <div className={styles.pageIntro}><div className={styles.overline}>VIDEO / 01</div><h1>视频下载</h1><p>复制分享链接，提取你想要的清晰度。</p></div>
     <section className={styles.workspace}>
       <div className={styles.panelHead}><div><span className={styles.panelEyebrow}>QUICK EXTRACT</span><h2>粘贴链接开始</h2></div><span className={styles.step}>STEP 01 <b>→</b> 02</span></div>
-      <div className={styles.inputRow}><div className={styles.inputWrap}><LinkOutlined /><input value={url} onChange={(event) => setUrl(event.target.value)} onKeyDown={(event) => event.key === 'Enter' && parse()} placeholder="粘贴 Bilibili、抖音、小红书等视频链接" aria-label="视频链接" /><button type="button" aria-label="清空链接" onClick={() => { setUrl(''); setResult(null); setPreviewError(false) }}>×</button></div><button type="button" className={styles.parseButton} onClick={parse} disabled={loading}>{loading ? <><Spin size="small" />解析中...</> : <><ThunderboltOutlined />提取视频</>}</button></div>
+      <div className={styles.inputRow}><div className={styles.inputWrap}><LinkOutlined /><input value={url} onChange={(event) => setUrl(event.target.value)} onKeyDown={(event) => event.key === 'Enter' && requestParse()} placeholder="粘贴 Bilibili、抖音、小红书等视频链接" aria-label="视频链接" /><button type="button" aria-label="清空链接" onClick={() => { setUrl(''); setResult(null); setPreviewError(false) }}>×</button></div><button type="button" className={styles.parseButton} onClick={requestParse} disabled={loading || captchaLoading}>{loading ? <><Spin size="small" />解析中...</> : captchaLoading ? <><Spin size="small" />验证中...</> : <><ThunderboltOutlined />提取视频</>}</button></div>
       <div className={styles.hint}><CheckCircleFilled />支持分享口令自动识别 · 解析结果仅在本地展示</div>
     </section>
     {result && <section className={styles.previewSection} aria-labelledby="video-preview-title">
@@ -72,5 +82,6 @@ export default function VideoDownload() {
     </section>}
     <section className={styles.platformSection}><div className={styles.sectionTitle}><span>SUPPORTED SOURCES</span><h2>支持的平台</h2></div><div className={styles.platformGrid}>{platforms.map((platform) => <div className={styles.platform} key={platform.name}><span className={styles.platformDot} style={{ background: platform.color }} />{platform.name}<span className={styles.platformArrow}>↗</span></div>)}</div></section>
     <aside className={styles.tip}><span>TIP</span><div><strong>链接解析</strong><p>支持完整网页链接和大部分平台的分享文案。下载前会保留原始画质选项。</p></div></aside>
+    {captcha}
   </div>
 }

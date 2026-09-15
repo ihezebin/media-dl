@@ -45,6 +45,16 @@ export type FileResponse = {
 
 type Envelope<T> = { code: number; message?: string; data: T }
 
+export class APIError extends Error {
+  status: number
+
+  constructor(message: string, status: number) {
+    super(message)
+    this.name = 'APIError'
+    this.status = status
+  }
+}
+
 const proxyHeaderNames: Record<string, string> = { Referer: 'referer', Origin: 'origin', 'User-Agent': 'user_agent' }
 
 // API responses keep upstream URLs; only browser media requests use /api/proxy.
@@ -73,9 +83,65 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   })
   const payload = (await response.json().catch(() => null)) as Envelope<T> | null
   if (!response.ok || !payload || payload.code !== 0) {
-    throw new Error(payload?.message || `请求失败 (${response.status})`)
+    throw new APIError(payload?.message || `请求失败 (${response.status})`, response.status)
   }
   return payload.data
+}
+
+export type BehaviorCaptcha = {
+  id: string
+  type: 'slide' | 'drag' | 'rotate'
+  expires_at: string
+  image: string
+  thumb: string
+  thumb_size?: number
+  thumb_x?: number
+  thumb_y?: number
+  thumb_width?: number
+  thumb_height?: number
+  angle?: number
+}
+
+let behaviorCaptchaToken: string | null = null
+let behaviorCaptchaExpiresAt = 0
+
+export function getBehaviorCaptcha() {
+  return request<BehaviorCaptcha>('/api/captcha')
+}
+
+export function verifyBehaviorCaptcha(payload: { id: string; type: BehaviorCaptcha['type']; x?: number; y?: number; angle?: number }) {
+  return request<{ verified: boolean; token: string; expires_at: string }>('/api/captcha/verify', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+}
+
+export function setBehaviorCaptchaToken(token: string, expiresAt: string) {
+  const timestamp = Date.parse(expiresAt)
+  if (!token || !Number.isFinite(timestamp)) return
+  behaviorCaptchaToken = token
+  behaviorCaptchaExpiresAt = timestamp
+}
+
+export function forgetBehaviorCaptcha() {
+  behaviorCaptchaToken = null
+  behaviorCaptchaExpiresAt = 0
+}
+
+export function hasBehaviorCaptchaToken() {
+  if (!behaviorCaptchaToken || behaviorCaptchaExpiresAt <= Date.now()) {
+    forgetBehaviorCaptcha()
+    return false
+  }
+  return true
+}
+
+function behaviorCaptchaHeaders(): HeadersInit {
+  return behaviorCaptchaToken ? { 'X-Captcha-Token': behaviorCaptchaToken } : {}
+}
+
+export function isCaptchaRequired(error: unknown) {
+  return error instanceof APIError && error.status === 401
 }
 
 export function getMusicPlatforms() {
@@ -83,8 +149,9 @@ export function getMusicPlatforms() {
 }
 
 export function searchMusic(params: { keyword: string; type: 'song' | 'artist' | 'album'; platforms: string[]; limit?: number; cookies?: Record<string, string> }) {
-  return request<MusicSearchResponse>('/api/music/search', {
+  return request<MusicSearchResponse>('/api/music/search/verified', {
     method: 'POST',
+    headers: behaviorCaptchaHeaders(),
     body: JSON.stringify({
       keyword: params.keyword,
       type: params.type,
@@ -117,8 +184,9 @@ export function downloadMusicAsset(song: MusicSong, action: 'audio' | 'cover' | 
 }
 
 export function getVideoInfo(url: string, platform?: string) {
-  return request<VideoInfo>('/api/video/info', {
+  return request<VideoInfo>('/api/video/info/verified', {
     method: 'POST',
+    headers: behaviorCaptchaHeaders(),
     body: JSON.stringify({ url, platform }),
   })
 }

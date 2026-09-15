@@ -3,11 +3,13 @@ module github.com/hezebin/media-dl
 go 1.25.10
 
 require (
-	github.com/guohuiyuan/music-lib v1.1.1-0.20260828151741-02402db9ef9d
 	github.com/gin-gonic/gin v1.10.0
+	github.com/guohuiyuan/music-lib v1.1.1-0.20260828151741-02402db9ef9d
 	github.com/ihezebin/olympus v1.0.29
 	github.com/spf13/cobra v1.8.1
 	github.com/tjfoc/gmsm v1.4.1
+	github.com/wenlng/go-captcha-assets v1.0.7
+	github.com/wenlng/go-captcha/v2 v2.0.5
 )
 
 require (
@@ -28,6 +30,7 @@ require (
 	github.com/go-playground/universal-translator v0.18.1 // indirect
 	github.com/go-playground/validator/v10 v10.26.0 // indirect
 	github.com/goccy/go-json v0.10.5 // indirect
+	github.com/golang/freetype v0.0.0-20170609003504-e2365dfdc4a0 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/ihezebin/openapi v1.0.7 // indirect
 	github.com/ihezebin/rotatelog v1.0.3 // indirect
@@ -73,6 +76,7 @@ require (
 	golang.org/x/arch v0.16.0 // indirect
 	golang.org/x/crypto v0.37.0 // indirect
 	golang.org/x/exp v0.0.0-20250305212735-054e65f0b394 // indirect
+	golang.org/x/image v0.16.0 // indirect
 	golang.org/x/mod v0.24.0 // indirect
 	golang.org/x/net v0.38.0 // indirect
 	golang.org/x/sync v0.13.0 // indirect

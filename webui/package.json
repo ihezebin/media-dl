@@ -17,13 +17,14 @@
     ]
   },
   "dependencies": {
+    "@ant-design/icons": "^5.0.1",
     "@chinese-fonts/xiaolai": "^3.0.0",
     "@free-fonts/zhuque-fangsong": "^1.0.0",
     "@hanzi.pro/webfonts-lxgw-wenkai": "^0.1.0",
-    "@ant-design/icons": "^5.0.1",
     "@hezebin/doraemon": "^1.3.4",
     "antd": "^5.20.0",
     "classnames": "^2.5.1",
+    "go-captcha-react": "1.0.5",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-router-dom": "^6.10.0",
