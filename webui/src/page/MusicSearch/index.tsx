@@ -232,13 +232,16 @@ export default function MusicSearch() {
   const [duration, setDuration] = useState(0)
   const [lyrics, setLyrics] = useState<LyricLine[]>([])
   const [lyricLoading, setLyricLoading] = useState(false)
-  const [volume, setVolume] = useState(() => readStoredNumber('media-dl.player.volume', 0.8, 0, 1))
+  const [volume, setVolume] = useState(() => readStoredNumber('media-dl.player.volume', 1, 0, 1))
   const [muted, setMuted] = useState(false)
-  const [playbackRate, setPlaybackRate] = useState(() => readStoredNumber('media-dl.player.rate', 1, 0.5, 2))
+  const [playbackRate, setPlaybackRate] = useState(1)
   const audioRef = useRef<HTMLAudioElement | null>(null)
+  const playerSettingsRef = useRef({ volume, muted, playbackRate })
   const resultsRef = useRef<HTMLElement | null>(null)
   const platformCookiesRef = useRef<Record<string, string>>({})
   const { captcha, captchaLoading, runWithCaptcha } = useBehaviorCaptcha()
+
+  playerSettingsRef.current = { volume, muted, playbackRate }
 
   useEffect(() => { getMusicPlatforms().then((result) => { if (result.platforms.length) { setPlatforms(result.platforms); setSelectedPlatforms(result.platforms) } }).catch(() => undefined) }, [])
   useEffect(() => { platformCookiesRef.current = platformCookies }, [platformCookies])
@@ -252,6 +255,9 @@ export default function MusicSearch() {
     if (!song) return
     let cancelled = false
     const audio = new Audio(proxyURL(song.url))
+    const playerSettings = playerSettingsRef.current
+    audio.volume = playerSettings.muted ? 0 : playerSettings.volume
+    audio.playbackRate = playerSettings.playbackRate
     audioRef.current = audio
     const onTime = () => setCurrentTime(audio.currentTime)
     const onMeta = () => setDuration(audio.duration || song.duration || 0)
@@ -272,7 +278,6 @@ export default function MusicSearch() {
     }
     try {
       window.localStorage.setItem('media-dl.player.volume', String(volume))
-      window.localStorage.setItem('media-dl.player.rate', String(playbackRate))
     } catch {
       // 播放控制仍然有效，只是不保存偏好
     }
@@ -307,6 +312,7 @@ export default function MusicSearch() {
       try { playable = await resolveMusicSong({ source: song.source, link: song.link }, platformCookies[song.source] || '') } catch (error) { message.error(error instanceof Error ? error.message : '无法解析播放地址'); return }
     }
     if (!playable.url) { message.error('该歌曲没有可用的播放地址'); return }
+    setPlaybackRate(1)
     setPlaying(playable)
   }
 
