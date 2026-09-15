@@ -89,3 +89,18 @@
   .controlTrack > .artwork { flex-basis: 34px; width: 34px; height: 34px; }
   .controlButtons .playButton { width: 44px; height: 44px; }
 }
+
+@media (max-width: 640px) {
+  .searchTypes { grid-template-columns: minmax(0, 1fr); gap: 8px; }
+  .searchTypeButton { height: 58px; padding: 0 12px; }
+  .searchTypeIcon { flex-basis: 32px; width: 32px; height: 32px; }
+  .searchTypeCopy strong { font-size: 13px; }
+  .searchTypeCopy small { font-size: 11px; }
+  .searchTypeCheck { flex: 0 0 19px; }
+}
+
+@media (max-width: 380px) {
+  .searchPanel { padding: 14px 12px; }
+  .searchTypeBlock { margin-top: 16px; padding-top: 15px; }
+  .searchTypeButton { padding-inline: 10px; }
+}

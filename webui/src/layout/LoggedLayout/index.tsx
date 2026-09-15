@@ -1,6 +1,7 @@
 import { GithubOutlined, HomeOutlined, MoonOutlined, SunOutlined } from '@ant-design/icons'
 import { Dropdown, Tooltip } from 'antd'
 import type { MenuProps } from 'antd'
+import { useLayoutEffect, useRef } from 'react'
 import { Outlet, useLocation, useNavigate } from 'react-router-dom'
 
 import { useStore } from '../../store'
@@ -16,10 +17,16 @@ const fontItems: MenuProps['items'] = [
 export default function LoggedLayout() {
   const navigate = useNavigate()
   const location = useLocation()
+  const contentRef = useRef<HTMLDivElement>(null)
   const themeDark = useStore((s) => s.themeDark)
   const setThemeDark = useStore((s) => s.setThemeDark)
   const fontFamily = useStore((s) => s.fontFamily)
   const setFontFamily = useStore((s) => s.setFontFamily)
+
+  useLayoutEffect(() => {
+    const content = contentRef.current
+    if (content) content.scrollTop = 0
+  }, [location.pathname])
 
   return (
     <div className={styles.shell}>
@@ -41,7 +48,7 @@ export default function LoggedLayout() {
             </Tooltip>
           </div>
         </header>
-        <div className={styles.content}>
+        <div ref={contentRef} className={styles.content}>
           <Outlet />
           <footer className={styles.supportFooter}>
             <span>NCM 提供技术支持</span>
