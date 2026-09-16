@@ -21,9 +21,7 @@ RUN apk add --no-cache ca-certificates ffmpeg tzdata
 WORKDIR /app
 COPY --from=go-build /out/media-dl ./media-dl
 COPY --from=webui-build /src/webui/dist ./webui/dist
-RUN mkdir -p /app/downloads
 ENV MEDIA_DL_PORT=8080 \
-    MEDIA_DL_OUTPUT_DIR=/app/downloads \
     MEDIA_DL_WEB_DIR=/app/webui/dist
 LABEL org.opencontainers.image.version=$BUILD_TAG
 EXPOSE 8080

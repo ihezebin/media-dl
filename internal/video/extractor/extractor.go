@@ -42,8 +42,22 @@ func NormalizePlatform(name string) (string, error) {
 		return "xigua", nil
 	case "tencent", "qq", "vqq", "腾讯", "腾讯视频":
 		return "tencent", nil
+	case "youtube", "yt", "油管":
+		return "youtube", nil
+	case "tiktok", "tk", "抖音国际版":
+		return "tiktok", nil
+	case "kuaishou", "ks", "快手", "kwai":
+		return "kuaishou", nil
+	case "baidu", "haokan", "百度视频", "好看视频":
+		return "baidu", nil
+	case "twitter", "x", "推特":
+		return "twitter", nil
+	case "douyu", "斗鱼":
+		return "douyu", nil
+	case "huya", "虎牙":
+		return "huya", nil
 	default:
-		return "", fmt.Errorf("未知平台 %q，可选: douyin | bilibili | xiaohongshu | weibo | youku | iqiyi | xigua | tencent", name)
+		return "", fmt.Errorf("未知平台 %q，可选: douyin | bilibili | xiaohongshu | weibo | youku | iqiyi | xigua | tencent | youtube | tiktok | kuaishou | baidu | twitter | douyu | huya", name)
 	}
 }
 

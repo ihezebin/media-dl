@@ -21,7 +21,7 @@ web-build:
 	cd webui && yarn install --frozen-lockfile && yarn build
 
 server:
-	go run . server --port $(PORT) --web-dir ./webui/dist --output ./downloads
+	go run . server --port $(PORT) --web-dir ./webui/dist
 
 webui:
 	cd webui && yarn dev

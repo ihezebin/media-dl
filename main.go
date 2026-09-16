@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -22,6 +23,7 @@ import (
 	_ "github.com/hezebin/media-dl/internal/video/extractor/douyin"
 	_ "github.com/hezebin/media-dl/internal/video/extractor/iqiyi"
 	_ "github.com/hezebin/media-dl/internal/video/extractor/tencent"
+	_ "github.com/hezebin/media-dl/internal/video/extractor/web"
 	_ "github.com/hezebin/media-dl/internal/video/extractor/weibo"
 	_ "github.com/hezebin/media-dl/internal/video/extractor/xiaohongshu"
 	_ "github.com/hezebin/media-dl/internal/video/extractor/xigua"
@@ -60,7 +62,7 @@ func main() {
 
 func newRootCommand() *cobra.Command {
 	root := &cobra.Command{
-		Version:       "1.0.0",
+		Version:       "1.0.2",
 		Use:           "media-dl",
 		Short:         "解析并下载多平台视频和音乐",
 		SilenceUsage:  true,
@@ -90,10 +92,10 @@ func newRootCommand() *cobra.Command {
 func newServerCommand() *cobra.Command {
 	var port uint
 	var webDir = envOrDefault("MEDIA_DL_WEB_DIR", "./webui/dist")
-	var outputDir = envOrDefault("MEDIA_DL_OUTPUT_DIR", "./downloads")
+	var apiOnly = envBool("MEDIA_DL_API_ONLY", false)
 	serverCmd := &cobra.Command{
 		Use:   "server",
-		Short: "启动 HTTP API 和 webui 服务",
+		Short: "启动 HTTP API 和 webui 服务（可选仅启动 API）",
 		Args:  cobra.NoArgs,
 		RunE: func(_ *cobra.Command, _ []string) error {
 			server, err := apihttp.New(context.Background(), apihttp.Config{
@@ -101,8 +103,8 @@ func newServerCommand() *cobra.Command {
 				Proxy:       flagProxy,
 				Cookie:      flagCookie,
 				CookiesFile: flagCookies,
-				OutputDir:   outputDir,
 				WebDir:      webDir,
+				APIOnly:     apiOnly,
 			})
 			if err != nil {
 				return err
@@ -112,7 +114,7 @@ func newServerCommand() *cobra.Command {
 	}
 	serverCmd.Flags().UintVarP(&port, "port", "P", envUint("MEDIA_DL_PORT", 8080), "HTTP 服务端口")
 	serverCmd.Flags().StringVar(&webDir, "web-dir", webDir, "webui 构建目录")
-	serverCmd.Flags().StringVarP(&outputDir, "output", "o", outputDir, "下载文件保存目录")
+	serverCmd.Flags().BoolVar(&apiOnly, "api-only", apiOnly, "仅启动 HTTP API，不注册 WebUI 和验证码相关接口")
 	return serverCmd
 }
 
@@ -130,6 +132,18 @@ func envUint(name string, fallback uint) uint {
 	}
 	var parsed uint
 	if _, err := fmt.Sscanf(value, "%d", &parsed); err != nil || parsed == 0 {
+		return fallback
+	}
+	return parsed
+}
+
+func envBool(name string, fallback bool) bool {
+	value := strings.TrimSpace(os.Getenv(name))
+	if value == "" {
+		return fallback
+	}
+	parsed, err := strconv.ParseBool(value)
+	if err != nil {
 		return fallback
 	}
 	return parsed
@@ -226,6 +240,8 @@ func newClient() (*httpx.Client, error) {
 			"kugou.com", "5sing.kugou.com", "kuwo.cn", "migu.cn",
 			"music.163.com", "qqmusic.qq.com", "qishui.com", "jamendo.com", "joox.com",
 			"apple.com", "music.apple.com",
+			"youtube.com", "youtu.be", "tiktok.com", "kuaishou.com", "kuaishouapp.com", "kwai.com",
+			"baidu.com", "x.com", "twitter.com", "douyu.com", "huya.com",
 		} {
 			cookies = append(cookies, httpx.ParseCookieHeader(flagCookie, domain)...)
 		}

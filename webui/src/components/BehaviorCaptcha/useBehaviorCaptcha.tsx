@@ -38,5 +38,5 @@ export function useBehaviorCaptcha() {
   }, [])
 
   const captcha = <BehaviorCaptcha open={open} onClose={close} onVerified={onVerified} onLoadingChange={setCaptchaLoading} />
-  return { captcha, captchaLoading, runWithCaptcha }
+  return { captcha, captchaLoading, captchaOpen: open, runWithCaptcha }
 }

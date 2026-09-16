@@ -5,7 +5,6 @@ import (
 	"encoding/base64"
 	"fmt"
 	"math/rand"
-	"net/url"
 	"strings"
 	"time"
 
@@ -119,19 +118,19 @@ func encodeWebParams(params map[string]string) string {
 		"publish_video_strategy_type", "round_trip_time",
 		"show_live_replay_strategy", "time_list_query",
 		"whale_cut_token", "update_version_code", "msToken",
-		"max_cursor", "count", "sec_user_id", "aweme_id",
+		"max_cursor", "count", "sec_user_id", "aweme_id", "request_source", "origin_type",
 	}
 	visited := make(map[string]bool, len(params))
 	var pairs []string
 	for _, k := range ordered {
 		if v, ok := params[k]; ok {
-			pairs = append(pairs, fmt.Sprintf("%s=%s", k, url.QueryEscape(v)))
+			pairs = append(pairs, fmt.Sprintf("%s=%s", k, webQueryEscape(v)))
 			visited[k] = true
 		}
 	}
 	for k, v := range params {
 		if !visited[k] {
-			pairs = append(pairs, fmt.Sprintf("%s=%s", k, url.QueryEscape(v)))
+			pairs = append(pairs, fmt.Sprintf("%s=%s", k, webQueryEscape(v)))
 		}
 	}
 	return strings.Join(pairs, "&")
@@ -139,32 +138,32 @@ func encodeWebParams(params map[string]string) string {
 
 func defaultWebParams(awemeID string) map[string]string {
 	return map[string]string{
-		"device_platform":    "webapp",
-		"aid":                "6383",
-		"channel":            "channel_pc_web",
-		"pc_client_type":     "1",
-		"version_code":       "290100",
-		"version_name":       "29.1.0",
-		"cookie_enabled":     "true",
-		"screen_width":       "1920",
-		"screen_height":      "1080",
-		"browser_language":   "zh-CN",
-		"browser_platform":   "Win32",
-		"browser_name":       "Chrome",
-		"browser_version":    "90.0.4430.212",
-		"browser_online":     "true",
-		"engine_name":        "Blink",
-		"engine_version":     "90.0.4430.212",
-		"os_name":            "Windows",
-		"os_version":         "10",
-		"cpu_core_num":       "12",
-		"device_memory":      "8",
-		"platform":           "PC",
-		"downlink":           "10",
-		"effective_type":     "4g",
-		"round_trip_time":    "50",
-		"update_version_code": "170400",
-		"aweme_id":           awemeID,
-		"msToken":            "",
+		"device_platform":     "webapp",
+		"aid":                 "6383",
+		"channel":             "channel_pc_web",
+		"pc_client_type":      "1",
+		"version_code":        "190500",
+		"version_name":        "19.5.0",
+		"cookie_enabled":      "true",
+		"screen_width":        "1920",
+		"screen_height":       "1080",
+		"browser_language":    "zh-CN",
+		"browser_platform":    "MacIntel",
+		"browser_name":        "Chrome",
+		"browser_version":     "120.0.0.0",
+		"browser_online":      "true",
+		"engine_name":         "Blink",
+		"engine_version":      "120.0.0.0",
+		"os_name":             "Mac OS",
+		"os_version":          "10.15.7",
+		"cpu_core_num":        "8",
+		"device_memory":       "8",
+		"platform":            "PC",
+		"downlink":            "10",
+		"effective_type":      "4g",
+		"round_trip_time":     "50",
+		"update_version_code": "190500",
+		"aweme_id":            awemeID,
+		"msToken":             "",
 	}
 }

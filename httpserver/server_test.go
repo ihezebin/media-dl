@@ -18,7 +18,7 @@ func TestServerRoutes(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(webDir, "index.html"), []byte("<!doctype html><title>media-dl</title>"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	server, err := New(context.Background(), Config{WebDir: webDir, OutputDir: t.TempDir()})
+	server, err := New(context.Background(), Config{WebDir: webDir})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -85,6 +85,42 @@ func TestServerRoutes(t *testing.T) {
 		server.app.Engine().ServeHTTP(resp, req)
 		if resp.Code != http.StatusBadRequest {
 			t.Fatalf("status = %d, want %d after captcha header was accepted; body = %s", resp.Code, http.StatusBadRequest, resp.Body.String())
+		}
+	})
+}
+
+func TestAPIRoutesDoNotRegisterWebUIOrCaptchaRoutes(t *testing.T) {
+	server, err := New(context.Background(), Config{APIOnly: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, path := range []string{
+		"/",
+		"/api/captcha",
+		"/api/captcha/verify",
+		"/api/music/search/verified",
+		"/api/video/info/verified",
+	} {
+		t.Run(path, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, path, nil)
+			if path == "/api/captcha/verify" || path == "/api/music/search/verified" || path == "/api/video/info/verified" {
+				req = httptest.NewRequest(http.MethodPost, path, nil)
+			}
+			resp := httptest.NewRecorder()
+			server.app.Engine().ServeHTTP(resp, req)
+			if resp.Code != http.StatusNotFound {
+				t.Fatalf("status = %d, want %d; body = %s", resp.Code, http.StatusNotFound, resp.Body.String())
+			}
+		})
+	}
+
+	t.Run("ordinary API remains available", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/api/music/platforms", nil)
+		resp := httptest.NewRecorder()
+		server.app.Engine().ServeHTTP(resp, req)
+		if resp.Code != http.StatusOK {
+			t.Fatalf("status = %d, want %d; body = %s", resp.Code, http.StatusOK, resp.Body.String())
 		}
 	})
 }

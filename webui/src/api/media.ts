@@ -35,13 +35,7 @@ export type VideoInfo = {
   formats: { format_id: string; quality: string; ext: string; width: number; height: number; has_audio: boolean; has_video: boolean }[]
 }
 
-export type FileResponse = {
-  action: string
-  file_url: string
-  file_path: string
-  cover_url?: string
-  cover_path?: string
-}
+export type DownloadedFile = { blob: Blob; filename: string }
 
 type Envelope<T> = { code: number; message?: string; data: T }
 
@@ -86,6 +80,39 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     throw new APIError(payload?.message || `请求失败 (${response.status})`, response.status)
   }
   return payload.data
+}
+
+function downloadFilename(response: Response) {
+  const disposition = response.headers.get('Content-Disposition') || ''
+  const encoded = disposition.match(/filename\*=UTF-8''([^;]+)/i)?.[1]
+  if (encoded) {
+    try { return decodeURIComponent(encoded.replace(/\+/g, ' ')) } catch { /* fall back to filename */ }
+  }
+  const fallback = disposition.match(/filename="([^"]+)"/i)?.[1] || disposition.match(/filename=([^;]+)/i)?.[1]
+  return fallback?.trim() || 'download'
+}
+
+async function downloadRequest(path: string, init?: RequestInit): Promise<DownloadedFile> {
+  const response = await fetch(path, {
+    ...init,
+    headers: { 'Content-Type': 'application/json', ...(init?.headers ?? {}) },
+  })
+  if (!response.ok) {
+    const payload = (await response.json().catch(() => null)) as Envelope<unknown> | null
+    throw new APIError(payload?.message || `请求失败 (${response.status})`, response.status)
+  }
+  return { blob: await response.blob(), filename: downloadFilename(response) }
+}
+
+export function triggerFileDownload(file: DownloadedFile) {
+  const objectURL = URL.createObjectURL(file.blob)
+  const anchor = document.createElement('a')
+  anchor.href = objectURL
+  anchor.download = file.filename
+  document.body.appendChild(anchor)
+  anchor.click()
+  anchor.remove()
+  window.setTimeout(() => URL.revokeObjectURL(objectURL), 1000)
 }
 
 export type BehaviorCaptcha = {
@@ -177,7 +204,7 @@ export function getMusicLyrics(song: MusicSong, cookie = '') {
 }
 
 export function downloadMusicAsset(song: MusicSong, action: 'audio' | 'cover' | 'lyrics', cookie = '') {
-  return request<FileResponse>('/api/music/download', {
+  return downloadRequest('/api/music/download', {
     method: 'POST',
     body: JSON.stringify({ action, song, cookie }),
   })
@@ -192,7 +219,7 @@ export function getVideoInfo(url: string, platform?: string) {
 }
 
 export function downloadVideo(payload: { url: string; platform?: string; format?: string; name?: string; cover?: boolean }) {
-  return request<FileResponse>('/api/video/download', {
+  return downloadRequest('/api/video/download', {
     method: 'POST',
     body: JSON.stringify(payload),
   })

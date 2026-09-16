@@ -5,7 +5,6 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -25,6 +24,7 @@ import (
 	_ "github.com/hezebin/media-dl/internal/video/extractor/douyin"
 	_ "github.com/hezebin/media-dl/internal/video/extractor/iqiyi"
 	_ "github.com/hezebin/media-dl/internal/video/extractor/tencent"
+	_ "github.com/hezebin/media-dl/internal/video/extractor/web"
 	_ "github.com/hezebin/media-dl/internal/video/extractor/weibo"
 	_ "github.com/hezebin/media-dl/internal/video/extractor/xiaohongshu"
 	_ "github.com/hezebin/media-dl/internal/video/extractor/xigua"
@@ -36,14 +36,13 @@ type Config struct {
 	Proxy       string
 	Cookie      string
 	CookiesFile string
-	OutputDir   string
 	WebDir      string
+	APIOnly     bool
 }
 
 type Server struct {
 	app          appServer
 	config       Config
-	outputDir    string
 	webDir       string
 	captchaStore *behaviorCaptchaStore
 }
@@ -59,15 +58,8 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 	if cfg.Port == 0 {
 		cfg.Port = 8081
 	}
-	if cfg.OutputDir == "" {
-		cfg.OutputDir = "./downloads"
-	}
 	if cfg.WebDir == "" {
 		cfg.WebDir = "./webui/dist"
-	}
-	outputDir, err := filepath.Abs(cfg.OutputDir)
-	if err != nil {
-		return nil, fmt.Errorf("解析输出目录失败: %w", err)
 	}
 	webDir, err := filepath.Abs(cfg.WebDir)
 	if err != nil {
@@ -76,9 +68,12 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 	if err := music.ConfigureProxy(cfg.Proxy); err != nil {
 		return nil, err
 	}
-	captchaStore, err := newBehaviorCaptchaStore()
-	if err != nil {
-		return nil, err
+	var captchaStore *behaviorCaptchaStore
+	if !cfg.APIOnly {
+		captchaStore, err = newBehaviorCaptchaStore()
+		if err != nil {
+			return nil, err
+		}
 	}
 	app, err := olympus.NewServer(
 		ctx,
@@ -91,7 +86,7 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 		return nil, err
 	}
 
-	server := &Server{app: app, config: cfg, outputDir: outputDir, webDir: webDir, captchaStore: captchaStore}
+	server := &Server{app: app, config: cfg, webDir: webDir, captchaStore: captchaStore}
 	app.RegisterRoutes(server)
 	if err := app.RegisterOpenAPIUI("/openapi", olympus.StoplightUI); err != nil {
 		return nil, fmt.Errorf("注册 OpenAPI 文档失败: %w", err)
@@ -107,16 +102,19 @@ func (s *Server) Run(ctx context.Context) error {
 func (s *Server) RegisterRoutes(router olympus.Router) {
 	api := router.Group("/api")
 	api.GET("/music/platforms", olympus.NewHandler(s.musicPlatforms))
-	api.GET("/captcha", olympus.NewHandler(s.captcha))
-	api.POST("/captcha/verify", olympus.NewHandler(s.captchaVerify))
 	api.POST("/music/search", olympus.NewHandler(s.musicSearch))
-	api.POST("/music/search/verified", olympus.NewHandler(s.musicSearchVerified))
 	api.POST("/music/resolve", olympus.NewHandler(s.musicResolve))
 	api.POST("/music/lyrics", olympus.NewHandler(s.musicLyrics))
 	api.POST("/music/download", olympus.NewHandler(s.musicDownload))
 	api.POST("/video/info", olympus.NewHandler(s.videoInfo))
-	api.POST("/video/info/verified", olympus.NewHandler(s.videoInfoVerified))
 	api.POST("/video/download", olympus.NewHandler(s.videoDownload))
+	if s.config.APIOnly {
+		return
+	}
+	api.GET("/captcha", olympus.NewHandler(s.captcha))
+	api.POST("/captcha/verify", olympus.NewHandler(s.captchaVerify))
+	api.POST("/music/search/verified", olympus.NewHandler(s.musicSearchVerified))
+	api.POST("/video/info/verified", olympus.NewHandler(s.videoInfoVerified))
 }
 
 type platformsResponse struct {
@@ -248,15 +246,10 @@ type musicDownloadRequest struct {
 	Cookie   string          `json:"cookie"`
 }
 
-type fileResponse struct {
-	Action    string `json:"action"`
-	FileURL   string `json:"file_url"`
-	FilePath  string `json:"file_path"`
-	CoverURL  string `json:"cover_url,omitempty"`
-	CoverPath string `json:"cover_path,omitempty"`
-}
+// downloadResponse 仅用于生成 OpenAPI 响应模型；成功响应实际是二进制附件。
+type downloadResponse struct{}
 
-func (s *Server) musicDownload(_ *gin.Context, req musicDownloadRequest) (*fileResponse, error) {
+func (s *Server) musicDownload(c *gin.Context, req musicDownloadRequest) (*downloadResponse, error) {
 	if req.Song.Source == "" || req.Song.Name == "" {
 		return nil, badRequest(fmt.Errorf("歌曲信息不完整"))
 	}
@@ -276,15 +269,31 @@ func (s *Server) musicDownload(_ *gin.Context, req musicDownloadRequest) (*fileR
 			return nil, badRequest(err)
 		}
 	}
+	tempDir, err := os.MkdirTemp("", "media-dl-http-download-")
+	if err != nil {
+		return nil, badRequest(fmt.Errorf("创建临时下载目录失败: %w", err))
+	}
+	defer os.RemoveAll(tempDir)
 	result, err := music.New(cookie).DownloadAsset(client, &req.Song, music.AssetOptions{
 		Action:    action,
-		OutputDir: s.outputDir,
+		OutputDir: tempDir,
 		Filename:  req.Filename,
 	})
 	if err != nil {
 		return nil, badRequest(err)
 	}
-	return s.fileResponse(action, result), nil
+	path := result.AudioPath
+	if action == "cover" {
+		path = result.CoverPath
+	}
+	if action == "lyrics" || action == "lyric" {
+		path = result.LyricsPath
+	}
+	if path == "" {
+		return nil, badRequest(fmt.Errorf("下载结果为空"))
+	}
+	c.FileAttachment(path, filepath.Base(path))
+	return nil, nil
 }
 
 type videoInfoRequest struct {
@@ -329,8 +338,8 @@ type videoDownloadRequest struct {
 	Cover    bool   `json:"cover"`
 }
 
-func (s *Server) videoDownload(ctx *gin.Context, req videoDownloadRequest) (*fileResponse, error) {
-	info, err := s.videoInfo(ctx, videoInfoRequest{Platform: req.Platform, URL: req.URL})
+func (s *Server) videoDownload(c *gin.Context, req videoDownloadRequest) (*downloadResponse, error) {
+	info, err := s.videoInfo(c, videoInfoRequest{Platform: req.Platform, URL: req.URL})
 	if err != nil {
 		return nil, err
 	}
@@ -338,20 +347,25 @@ func (s *Server) videoDownload(ctx *gin.Context, req videoDownloadRequest) (*fil
 	if err != nil {
 		return nil, badRequest(err)
 	}
+	tempDir, err := os.MkdirTemp("", "media-dl-http-download-")
+	if err != nil {
+		return nil, badRequest(fmt.Errorf("创建临时下载目录失败: %w", err))
+	}
+	defer os.RemoveAll(tempDir)
 	result, err := downloader.Download(client, info, downloader.Options{
-		OutputDir:     s.outputDir,
-		Filename:      req.Name,
-		Format:        req.Format,
-		DownloadCover: req.Cover,
-		Quiet:         true,
+		OutputDir: tempDir,
+		Filename:  req.Name,
+		Format:    req.Format,
+		Quiet:     true,
 	})
 	if err != nil {
 		return nil, badRequest(err)
 	}
-	response := &fileResponse{Action: "video", FilePath: result.VideoPath, CoverPath: result.CoverPath}
-	response.FileURL = s.fileURL(result.VideoPath)
-	response.CoverURL = s.fileURL(result.CoverPath)
-	return response, nil
+	if result.VideoPath == "" {
+		return nil, badRequest(fmt.Errorf("下载结果为空"))
+	}
+	c.FileAttachment(result.VideoPath, filepath.Base(result.VideoPath))
+	return nil, nil
 }
 
 func (s *Server) client() (*httpx.Client, error) {
@@ -364,7 +378,7 @@ func (s *Server) client() (*httpx.Client, error) {
 		cookies = append(cookies, loaded...)
 	}
 	if raw := strings.TrimSpace(s.config.Cookie); raw != "" {
-		for _, domain := range []string{"douyin.com", "bilibili.com", "xiaohongshu.com", "weibo.com", "weibo.cn", "youku.com", "tudou.com", "iqiyi.com", "iq.com", "ixigua.com", "toutiao.com", "qq.com", "kugou.com", "5sing.kugou.com", "kuwo.cn", "migu.cn", "music.163.com", "qqmusic.qq.com", "qishui.com", "jamendo.com", "joox.com", "apple.com", "music.apple.com"} {
+		for _, domain := range []string{"douyin.com", "bilibili.com", "xiaohongshu.com", "weibo.com", "weibo.cn", "youku.com", "tudou.com", "iqiyi.com", "iq.com", "ixigua.com", "toutiao.com", "qq.com", "kugou.com", "5sing.kugou.com", "kuwo.cn", "migu.cn", "music.163.com", "qqmusic.qq.com", "qishui.com", "jamendo.com", "joox.com", "apple.com", "music.apple.com", "youtube.com", "youtu.be", "tiktok.com", "kuaishou.com", "kuaishouapp.com", "kwai.com", "baidu.com", "x.com", "twitter.com", "douyu.com", "huya.com"} {
 			cookies = append(cookies, httpx.ParseCookieHeader(raw, domain)...)
 		}
 	}
@@ -390,40 +404,12 @@ func (s *Server) musicCookie() (string, error) {
 	return strings.Join(parts, "; "), nil
 }
 
-func (s *Server) fileResponse(action string, result *music.DownloadResult) *fileResponse {
-	path := result.AudioPath
-	if action == "cover" {
-		path = result.CoverPath
-	}
-	if action == "lyrics" {
-		path = result.LyricsPath
-	}
-	return &fileResponse{Action: action, FileURL: s.fileURL(path), FilePath: path}
-}
-
-func (s *Server) fileURL(path string) string {
-	if path == "" {
-		return ""
-	}
-	return "/api/files/" + url.PathEscape(filepath.Base(path))
-}
-
 func (s *Server) registerFilesAndWeb() {
 	engine := s.app.Engine()
 	engine.GET(proxyPath, s.proxy)
-	engine.GET("/api/files/*path", func(c *gin.Context) {
-		rel := strings.TrimPrefix(c.Param("path"), "/")
-		candidate := filepath.Join(s.outputDir, filepath.Clean(rel))
-		if !within(s.outputDir, candidate) {
-			c.Status(http.StatusForbidden)
-			return
-		}
-		if _, err := os.Stat(candidate); err != nil {
-			c.Status(http.StatusNotFound)
-			return
-		}
-		c.File(candidate)
-	})
+	if s.config.APIOnly {
+		return
+	}
 	engine.NoRoute(func(c *gin.Context) {
 		if strings.HasPrefix(c.Request.URL.Path, "/api/") {
 			c.JSON(http.StatusNotFound, gin.H{"code": http.StatusNotFound, "message": "route not found"})

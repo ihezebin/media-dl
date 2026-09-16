@@ -7,7 +7,7 @@ import { Drawer, Input, message, Select, Slider, Spin, Tooltip } from 'antd'
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { CSSProperties } from 'react'
 
-import { downloadMusicAsset, forgetBehaviorCaptcha, getMusicLyrics, getMusicPlatforms, isCaptchaRequired, proxyURL, resolveMusicSong, searchMusic, type MusicSong } from '../../api/media'
+import { downloadMusicAsset, forgetBehaviorCaptcha, getMusicLyrics, getMusicPlatforms, isCaptchaRequired, proxyURL, resolveMusicSong, searchMusic, triggerFileDownload, type MusicSong } from '../../api/media'
 import { useBehaviorCaptcha } from '../../components/BehaviorCaptcha/useBehaviorCaptcha'
 
 import styles from './index.module.scss'
@@ -180,17 +180,6 @@ function Player({ song, playing, currentTime, duration, lyrics, lyricLoading, vo
   </div>
 }
 
-function triggerDownload(url: string) {
-  const anchor = document.createElement('a')
-  anchor.href = url
-  anchor.download = ''
-  anchor.target = '_blank'
-  anchor.rel = 'noreferrer'
-  document.body.appendChild(anchor)
-  anchor.click()
-  anchor.remove()
-}
-
 function readStoredPlatformCookies() {
   if (typeof window === 'undefined') return {}
   try {
@@ -325,7 +314,7 @@ export default function MusicSearch() {
 
   const download = async (song: MusicSong, action: 'audio' | 'cover' | 'lyrics') => {
     if (song.is_invalid && action === 'audio') { message.warning('该歌曲已标记为无效，无法下载音频'); return }
-    try { const result = await downloadMusicAsset(song, action, platformCookies[song.source] || ''); if (result.file_url) triggerDownload(result.file_url); message.success(`${action === 'audio' ? '歌曲' : action === 'cover' ? '封面' : '歌词'}下载已开始`) } catch (error) { message.error(error instanceof Error ? error.message : '下载失败') }
+    try { const file = await downloadMusicAsset(song, action, platformCookies[song.source] || ''); triggerFileDownload(file); message.success(`${action === 'audio' ? '歌曲' : action === 'cover' ? '封面' : '歌词'}下载已开始`) } catch (error) { message.error(error instanceof Error ? error.message : '下载失败') }
   }
 
   const togglePlatform = (platform: string) => setSelectedPlatforms((current) => current.includes(platform) ? current.filter((item) => item !== platform) : [...current, platform])

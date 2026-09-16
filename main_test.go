@@ -57,6 +57,23 @@ func TestCommonFlagsAreAvailableToBothDomains(t *testing.T) {
 	}
 }
 
+func TestServerHasAPIOOnlyFlag(t *testing.T) {
+	server := findCommand(newRootCommand(), "server")
+	if server == nil {
+		t.Fatal("server command is missing")
+	}
+	flag := server.Flag("api-only")
+	if flag == nil {
+		t.Fatal("server command is missing --api-only")
+	}
+	if flag.DefValue != "false" {
+		t.Fatalf("--api-only default = %q, want false", flag.DefValue)
+	}
+	if server.Flag("output") != nil {
+		t.Fatal("server command must not expose a persistent --output directory")
+	}
+}
+
 func findCommand(parent *cobra.Command, name string) *cobra.Command {
 	for _, command := range parent.Commands() {
 		if command.Name() == name {

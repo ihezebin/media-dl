@@ -2,13 +2,16 @@ package douyin
 
 import (
 	"bytes"
+	"crypto/md5"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
 	"regexp"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/hezebin/media-dl/internal/httpx"
 	"github.com/hezebin/media-dl/internal/util"
@@ -24,6 +27,11 @@ var (
 	shareURLRe = regexp.MustCompile(`(?i)https?://(?:www\.)?(?:douyin\.com|iesdouyin\.com)/(?:video|note|share/video)/(\d+)`)
 	shortURLRe = regexp.MustCompile(`(?i)https?://v\.douyin\.com/[\w-]+/?`)
 	anyIDRe    = regexp.MustCompile(`/(\d{15,})`)
+)
+
+const (
+	douyinShareUA    = "Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1"
+	webSignatureSalt = "A96D855A08C0A9707F8BEF0D9A527E4E"
 )
 
 type Extractor struct{}
@@ -122,7 +130,7 @@ func fetchDetail(client *httpx.Client, awemeID string) (map[string]any, error) {
 
 func fetchDetailSharePage(client *httpx.Client, awemeID string) (map[string]any, error) {
 	headers := map[string]string{
-		"User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1",
+		"User-Agent": douyinShareUA,
 		"Referer":    "https://www.douyin.com/",
 		"Accept":     "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
 	}
@@ -213,20 +221,30 @@ func fetchDetailWebAPI(client *httpx.Client, awemeID string) (map[string]any, er
 		return nil, err
 	}
 	params := defaultWebParams(awemeID)
+	params["request_source"] = "600"
+	params["origin_type"] = "general"
 	query := encodeWebParams(params)
 	aBogus := generateABogus(query)
-	apiURL := "https://www.douyin.com/aweme/v1/web/aweme/detail/?" + query + "&a_bogus=" + url.QueryEscape(aBogus)
+	query += "&a_bogus=" + webQueryEscape(aBogus)
+	query, signatureHeaders := addWebSignature(client, query)
+	apiURL := "https://www.douyin.com/aweme/v1/web/aweme/detail/?" + query
 
 	headers := map[string]string{
 		"User-Agent": webAPIUA,
 		"Referer":    "https://www.douyin.com/",
 		"Accept":     "application/json, text/plain, */*",
 	}
+	for k, v := range signatureHeaders {
+		headers[k] = v
+	}
 	body, resp, err := client.GetString(apiURL, headers)
 	if err != nil {
 		return nil, fmt.Errorf("web detail 请求失败: %w", err)
 	}
 	if resp.StatusCode >= 400 {
+		if strings.Contains(body, "ArgusSecurityPlugin") || strings.Contains(strings.ToLower(body), "uifid") {
+			return nil, fmt.Errorf("web detail HTTP %d：抖音要求浏览器访客签名，请导入当前抖音 Cookie（需包含 uifid）后重试", resp.StatusCode)
+		}
 		return nil, fmt.Errorf("web detail HTTP %d", resp.StatusCode)
 	}
 	if strings.TrimSpace(body) == "" {
@@ -243,6 +261,49 @@ func fetchDetailWebAPI(client *httpx.Client, awemeID string) (map[string]any, er
 		return nil, fmt.Errorf("web detail status_code=%v msg=%v", code, data["status_msg"])
 	}
 	return nil, fmt.Errorf("web detail 无 aweme_detail: %s", awemeID)
+}
+
+// addWebSignature adds the visitor-bound signature required by the current
+// Douyin web detail endpoint. A-Bogus alone is no longer sufficient: Douyin
+// binds this signature to the uifid cookie minted by its own web page.
+func addWebSignature(client *httpx.Client, query string) (string, map[string]string) {
+	cookies := client.HTTP().Jar.Cookies(&url.URL{Scheme: "https", Host: "www.douyin.com", Path: "/"})
+	uifid, verifyFP := "", ""
+	for _, c := range cookies {
+		switch strings.ToLower(c.Name) {
+		case "uifid", "uifid_temp", "uifidtemp":
+			if uifid == "" {
+				uifid = c.Value
+			}
+		case "s_v_web_id":
+			verifyFP = c.Value
+		}
+	}
+	if uifid == "" {
+		return query, nil
+	}
+	if verifyFP != "" {
+		query += "&verifyFp=" + webQueryEscape(verifyFP) + "&fp=" + webQueryEscape(verifyFP)
+	}
+	query += "&uifid=" + webQueryEscape(uifid)
+	timestamp := strconv.FormatInt(time.Now().Unix(), 10)
+	query += "&timestamp=" + timestamp
+	digest := md5.Sum([]byte(uifid + "_" + timestamp + "_" + webSignatureSalt + "_" + query))
+	signature := fmt.Sprintf("%x", digest)
+	query += "&x-secsdk-web-signature=" + signature
+	return query, map[string]string{
+		"uifid":                  uifid,
+		"x-secsdk-web-signature": signature,
+		"x-secsdk-web-expire":    timestamp,
+	}
+}
+
+func webQueryEscape(value string) string {
+	// URLSearchParams uses the application/x-www-form-urlencoded percent-encode
+	// set: spaces are %20 and ~ is escaped, while *-._ remain unchanged.
+	value = url.QueryEscape(value)
+	value = strings.ReplaceAll(value, "+", "%20")
+	return strings.ReplaceAll(value, "~", "%7E")
 }
 
 func fetchDetailWebPage(client *httpx.Client, awemeID string) (map[string]any, error) {

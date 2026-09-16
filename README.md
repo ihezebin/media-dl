@@ -41,10 +41,18 @@ CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -o ./dist/media-dl-linux-arm64 .
 除了 CLI，项目还提供 `media-dl server` HTTP 服务。服务端使用开源项目 [olympus/httpserver](https://github.com/ihezebin/olympus) 注册 API 和 OpenAPI 文档，音乐接口继续使用 [guohuiyuan/music-lib](https://github.com/guohuiyuan/music-lib) 的平台实现；构建后的 `webui` 由同一服务托管。
 
 ```bash
-go run . server --port 8080 --web-dir ./webui/dist --output ./downloads
+go run . server --port 8080 --web-dir ./webui/dist
 ```
 
 服务启动后，Web UI 地址为 `http://127.0.0.1:8080/`，接口文档为 `http://127.0.0.1:8080/openapi`。完整接口、请求体、响应体和环境变量说明见 [HTTP API 文档](./httpserver/README.md)。
+
+如果只需要提供 HTTP API、不需要启动 Web UI，可使用 `--api-only`：
+
+```bash
+go run . server --api-only --port 8080
+```
+
+此模式不托管 Web UI 静态文件，也不会注册 Web UI 的验证码接口和带验证码接口：`/api/captcha`、`/api/captcha/verify`、`/api/music/search/verified`、`/api/video/info/verified`。普通 HTTP API、在线下载接口和 OpenAPI 文档仍可用；`--web-dir` 在此模式下会被忽略。也可以通过 `MEDIA_DL_API_ONLY=true` 开启。
 
 ## 本地一键部署
 
@@ -55,7 +63,7 @@ make build
 make server
 ```
 
-如果使用 Docker Compose，则不需要先执行 `make build` 或 `make server`。直接执行 `make docker-up` 即可；Compose 会在镜像构建过程中自动构建前端和 Go 服务，下载文件会保存在项目根目录的 `downloads/`：
+如果使用 Docker Compose，则不需要先执行 `make build` 或 `make server`。直接执行 `make docker-up` 即可；Compose 会在镜像构建过程中自动构建前端和 Go 服务，下载请求由服务端在线返回：
 
 ```bash
 make docker-up
@@ -67,7 +75,7 @@ make docker-up
 docker compose -f docker-compose.local.yml up --build
 ```
 
-可通过 `MEDIA_DL_PORT`、`MEDIA_DL_PROXY`、`MEDIA_DL_COOKIE` 和 `MEDIA_DL_COOKIES` 配置端口、代理与登录态，例如：
+可通过 `MEDIA_DL_PORT`、`MEDIA_DL_PROXY`、`MEDIA_DL_COOKIE`、`MEDIA_DL_COOKIES` 和 `MEDIA_DL_API_ONLY` 配置端口、代理、登录态及是否仅启动 API，例如：
 
 ```bash
 MEDIA_DL_PORT=8090 MEDIA_DL_PROXY=http://host.docker.internal:7890 make docker-up
@@ -114,6 +122,7 @@ MEDIA_DL_PORT=8080
 MEDIA_DL_PROXY=
 MEDIA_DL_COOKIE=
 MEDIA_DL_COOKIES=
+MEDIA_DL_API_ONLY=false
 ```
 
 `MEDIA_DL_TAG` 使用 GitHub 仓库中发布的 tag，并且必须与 `make package` 推送的镜像 tag 一致。私有腾讯云仓库需要先在服务器登录：
@@ -125,7 +134,7 @@ docker compose up -d
 docker compose ps
 ```
 
-升级时只需把 `.env` 中的 `MEDIA_DL_TAG` 改为新的 GitHub tag，再执行 `docker compose pull && docker compose up -d`。下载文件会持久化在部署目录的 `downloads/`，查看日志或停止服务：
+升级时只需把 `.env` 中的 `MEDIA_DL_TAG` 改为新的 GitHub tag，再执行 `docker compose pull && docker compose up -d`。下载请求由服务端在线返回，不需要挂载下载目录，查看日志或停止服务：
 
 ```bash
 docker compose logs -f media-dl
@@ -176,6 +185,14 @@ webui/                    Vite + React 前端
 | `-h, --help` | —      | 显示当前 video 命令或子命令帮助。                                                                           | 显示当前 music 命令或子命令帮助。                                                                               | 显示 HTTP 服务参数帮助。                            |
 
 `--cookie` 和 `--cookies` 可以同时传入；实现会合并两者。Cookie 通常具有时效性，使用浏览器导出的登录态时不要提交到 Git。
+
+### `server` 参数
+
+| 参数 | 默认值 | 说明 |
+| --- | --- | --- |
+| `-P, --port` | `8080`（`MEDIA_DL_PORT`） | HTTP 服务端口 |
+| `--web-dir` | `./webui/dist`（`MEDIA_DL_WEB_DIR`） | WebUI 构建目录；API-only 模式下忽略 |
+| `--api-only` | `false`（`MEDIA_DL_API_ONLY`） | 仅启动 HTTP API，不注册 WebUI 和验证码相关接口 |
 
 错误信息：video `info` 将失败信息写到 stdout JSON 的 `err_msg`（`success: false`），进程非 0 退出；video/music 下载过程信息写到 **stderr**；music `search` 输出 JSON，部分平台失败时会保留在 `errors` 字段。
 
@@ -318,6 +335,13 @@ Apple Music 的搜索和单曲解析可用；当前上游 `music-lib` 的 `GetDo
 | `iqiyi`       | `iq`、`爱奇艺`       | `www.iqiyi.com/v_....html`                                             |
 | `xigua`       | `ixigua`、`西瓜视频` | `www.ixigua.com/{id}`、`v.ixigua.com/...`                              |
 | `tencent`     | `qq`、`腾讯视频`     | `v.qq.com/x/page/...`、`v.qq.com/x/cover/.../...`                      |
+| `youtube`     | `yt`、`油管`         | `youtube.com/watch?v=...`、`youtu.be/...`                               |
+| `tiktok`      | `tk`、`抖音国际版`   | `tiktok.com/@user/video/...`                                            |
+| `kuaishou`    | `ks`、`快手`、`kwai` | `kuaishou.com/short-video/...`                                          |
+| `baidu`       | `haokan`、`好看视频` | `haokan.baidu.com/v?...`                                                |
+| `twitter`     | `x`、`推特`          | `x.com/user/status/...`、`twitter.com/user/status/...`                  |
+| `douyu`       | `斗鱼`               | `douyu.com/...`、`v.douyu.com/...`                                     |
+| `huya`        | `虎牙`               | `huya.com/...`                                                         |
 
 ### `video info` — 只获取信息
 
@@ -354,7 +378,7 @@ Apple Music 的搜索和单曲解析可用；当前上游 `music-lib` 的 `GetDo
 | ------------- | ------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `success`     | bool   | 是否解析成功                                                                                                                                                |
 | `err_msg`     | string | **仅失败时存在**：具体失败原因（如下线、VIP、风控、链接无法识别）                                                                                           |
-| `platform`    | string | 平台标识：`douyin` / `bilibili` / `xiaohongshu` / `weibo` / `youku` / `iqiyi` / `xigua` / `tencent`                                                         |
+| `platform`    | string | 平台标识：`douyin` / `bilibili` / `xiaohongshu` / `weibo` / `youku` / `iqiyi` / `xigua` / `tencent` / `youtube` / `tiktok` / `kuaishou` / `baidu` / `twitter` / `douyu` / `huya` |
 | `id`          | string | 平台侧内容 ID。抖音为 `aweme_id`；B 站为 BV 号（多分 P 时可能带 `_pN`）；小红书为笔记 ID                                                                    |
 | `title`       | string | 标题；抖音常与文案相同，小红书无标题时可能回退到描述或 ID                                                                                                   |
 | `description` | string | 描述 / 文案；没有则为 `""`                                                                                                                                  |
@@ -549,6 +573,27 @@ PC 页有 antibot，主路径走头条移动详情 `m.toutiao.com/i{id}/info/`�
 - 先走 `vv.video.qq.com/getinfo`（platform 11 / 4100201），再按清晰度 `getkey` 拼 `vkey`
 - 失败则用 AES-CBC 生成 `cKey` 请求 `h5vv6.video.qq.com/getvinfo`（HLS，需 ffmpeg）
 - 剧集封面页（仅 cover、无 vid）不支持整季下载；VIP 内容需登录 Cookie
+
+#### YouTube
+
+- 支持 `youtube.com/watch?v=...`、Shorts、Embed 和 `youtu.be` 短链
+- 使用 YouTube 页面中的 Innertube 播放信息获取一体流或自适应流；分离音视频时由统一下载器调用 `ffmpeg` 合并
+- 受年龄、地区、登录态或 PO Token 影响的资源，需要提供浏览器 Cookie，部分资源仍可能无法解析
+
+#### TikTok、快手和百度视频
+
+- 支持 TikTok 视频页、快手短视频页，以及 `haokan.baidu.com` / 百度视频链接
+- 优先读取页面公开的播放数据、JSON-LD 和媒体元数据；页面触发登录或风控时使用 `--cookies` 重试
+
+#### X / Twitter
+
+- 支持 `x.com/{user}/status/{id}`、`twitter.com/{user}/status/{id}` 和 `t.co` 短链
+- 通过公开推文 syndication 数据读取视频变体并按码率选择优选格式；无视频媒体的推文会明确返回失败
+
+#### 斗鱼和虎牙
+
+- 支持直播间、视频/回放页面中公开暴露的 HLS、FLV 或 MP4 播放地址
+- 直播流地址具有时效性；如果页面没有返回公开播放地址，通常需要登录 Cookie 或平台侧签名，解析器会返回具体失败原因
 
 ## Cookie 文件
 

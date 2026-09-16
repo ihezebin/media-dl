@@ -10,5 +10,4 @@ services:
       MEDIA_DL_PROXY: ${MEDIA_DL_PROXY:-}
       MEDIA_DL_COOKIE: ${MEDIA_DL_COOKIE:-}
       MEDIA_DL_COOKIES: ${MEDIA_DL_COOKIES:-}
-    volumes:
-      - ./downloads:/app/downloads
+      MEDIA_DL_API_ONLY: ${MEDIA_DL_API_ONLY:-false}
