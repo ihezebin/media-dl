@@ -131,6 +131,9 @@ func defaultMusicProxyHeaders(target *url.URL) map[string]string {
 	if strings.HasSuffix(host, "kuwo.cn") {
 		return map[string]string{"Referer": "https://www.kuwo.cn/"}
 	}
+	if strings.HasSuffix(host, "kwaicdn.com") || strings.HasSuffix(host, "yximgs.com") {
+		return map[string]string{"Referer": "https://www.kuaishou.com/"}
+	}
 	return nil
 }
 

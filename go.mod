@@ -4,6 +4,7 @@ go 1.25.10
 
 require (
 	github.com/gin-gonic/gin v1.10.0
+	github.com/dop251/goja v0.0.0-20260915173639-b3fa02110dbd
 	github.com/guohuiyuan/music-lib v1.1.1-0.20260828151741-02402db9ef9d
 	github.com/ihezebin/olympus v1.0.29
 	github.com/spf13/cobra v1.8.1
@@ -18,6 +19,7 @@ require (
 	github.com/bytedance/sonic/loader v0.2.4 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/cloudwego/base64x v0.1.5 // indirect
+	github.com/dlclark/regexp2/v2 v2.5.2 // indirect
 	github.com/gabriel-vasile/mimetype v1.4.8 // indirect
 	github.com/getkin/kin-openapi v0.131.0 // indirect
 	github.com/gin-contrib/pprof v1.5.3 // indirect
@@ -29,8 +31,10 @@ require (
 	github.com/go-playground/locales v0.14.1 // indirect
 	github.com/go-playground/universal-translator v0.18.1 // indirect
 	github.com/go-playground/validator/v10 v10.26.0 // indirect
+	github.com/go-sourcemap/sourcemap v2.1.3+incompatible // indirect
 	github.com/goccy/go-json v0.10.5 // indirect
 	github.com/golang/freetype v0.0.0-20170609003504-e2365dfdc4a0 // indirect
+	github.com/google/pprof v0.0.0-20230207041349-798e818bf904 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/ihezebin/openapi v1.0.7 // indirect
 	github.com/ihezebin/rotatelog v1.0.3 // indirect

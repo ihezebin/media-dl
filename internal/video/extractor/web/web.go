@@ -3,6 +3,7 @@
 package web
 
 import (
+	"crypto/md5"
 	"encoding/json"
 	"fmt"
 	"html"
@@ -12,7 +13,9 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
+	"github.com/dop251/goja"
 	"github.com/hezebin/media-dl/internal/httpx"
 	"github.com/hezebin/media-dl/internal/util"
 	"github.com/hezebin/media-dl/internal/video/extractor"
@@ -38,8 +41,8 @@ type mediaCandidate struct {
 
 var platforms = []platform{
 	{name: "youtube", match: matchYouTube, id: youtubeID, host: "https://www.youtube.com/"},
-	{name: "tiktok", match: matchTikTok, id: numericID, host: "https://www.tiktok.com/"},
-	{name: "kuaishou", match: matchKuaishou, id: kuaishouID, host: "https://www.kuaishou.com/"},
+	{name: "tiktok", match: matchTikTok, id: numericID, host: "https://www.tiktok.com/", pageUA: "Mozilla/5.0 (iPhone; CPU iPhone OS 18_6 like Mac OS X) AppleWebKit/605.1.15 Version/18.6 Mobile/15E148 Safari/604.1"},
+	{name: "kuaishou", match: matchKuaishou, id: kuaishouID, host: "https://www.kuaishou.com/", pageUA: "Mozilla/5.0 (iPhone; CPU iPhone OS 18_6 like Mac OS X) AppleWebKit/605.1.15 Version/18.6 Mobile/15E148 Safari/604.1"},
 	{name: "baidu", match: matchBaidu, id: baiduID, host: "https://haokan.baidu.com/"},
 	{name: "twitter", match: matchTwitter, id: twitterID, host: "https://x.com/", pageUA: httpx.DefaultUA},
 	{name: "douyu", match: matchDouyu, id: douyuID, host: "https://www.douyu.com/"},
@@ -107,6 +110,19 @@ func (e *Extractor) Extract(client *httpx.Client, rawURL string) (*model.VideoIn
 	}
 
 	info := pageInfo(e.config.name, id, pageURL, body)
+	if e.config.name == "kuaishou" {
+		if kuaishouInfo := parseKuaishouPage(body, pageURL, id, headers); kuaishouInfo != nil {
+			return kuaishouInfo, nil
+		}
+	}
+	if e.config.name == "huya" {
+		if huyaInfo := parseHuyaPage(body, pageURL, id, headers); huyaInfo != nil {
+			return huyaInfo, nil
+		}
+	}
+	if e.config.name == "douyu" {
+		return e.extractDouyu(client, body, pageURL, id, headers)
+	}
 	info.Formats = collectPageFormats(body, headers)
 	if len(info.Formats) == 0 {
 		return nil, fmt.Errorf("未找到 %s 播放地址（可能需要登录 Cookie、地区网络或页面风控）", e.config.name)
@@ -163,9 +179,15 @@ func pageHeaders(p platform, pageURL string) map[string]string {
 	if ua == "" {
 		ua = httpx.DefaultUA
 	}
+	referer := pageURL
+	// 快手会在带当前短视频 URL 作为 Referer 的请求中返回只有站点配置的
+	// shell；使用站点首页作为 Referer 才会下发当前页面的 Apollo 状态。
+	if p.name == "kuaishou" {
+		referer = p.host
+	}
 	return map[string]string{
 		"User-Agent":      ua,
-		"Referer":         pageURL,
+		"Referer":         referer,
 		"Accept":          "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
 		"Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
 	}
@@ -187,6 +209,230 @@ func pageInfo(platformName, id, pageURL, body string) *model.VideoInfo {
 	return info
 }
 
+func parseKuaishouPage(body, pageURL, id string, headers map[string]string) *model.VideoInfo {
+	var photo map[string]any
+	var root map[string]any
+	for _, name := range []string{"__APOLLO_STATE__", "INIT_STATE"} {
+		value, ok := embeddedJSONObject(body, name)
+		if !ok {
+			continue
+		}
+		if root == nil {
+			root = value
+		}
+		if photo == nil {
+			photo = findKuaishouPhoto(value, id)
+		}
+	}
+	if photo == nil {
+		return nil
+	}
+
+	info := &model.VideoInfo{
+		Platform:   "kuaishou",
+		ID:         firstNonEmpty(util.AsString(photo["id"]), id),
+		Title:      util.AsString(photo["caption"]),
+		CoverURL:   firstNonEmpty(util.AsString(photo["coverUrl"]), util.AsString(photo["poster"])),
+		WebpageURL: pageURL,
+	}
+	if duration := util.ToInt64(photo["duration"]); duration > 0 {
+		info.Duration = float64(duration) / 1000
+	}
+	if author := findKuaishouAuthor(root); author != nil {
+		info.Author = firstNonEmpty(util.AsString(author["name"]), util.AsString(author["screen_name"]))
+		info.AuthorID = firstNonEmpty(util.AsString(author["id"]), util.AsString(author["userId"]))
+	}
+
+	var candidates []mediaCandidate
+	for _, key := range []string{"photoUrl", "photoH265Url", "croppedPhotoUrl", "croppedPhotoH265Url"} {
+		if value := mediaURL(util.AsString(photo[key])); value != "" {
+			candidates = append(candidates, mediaCandidate{url: value, key: key})
+		}
+	}
+	collectJSONCandidates(photo, &candidates)
+	info.Formats = formatsFromCandidates(candidates, headers)
+	if len(info.Formats) == 0 {
+		return nil
+	}
+	if info.Title == "" {
+		info.Title = info.ID
+	}
+	return info
+}
+
+func parseHuyaPage(body, pageURL, id string, headers map[string]string) *model.VideoInfo {
+	// 虎牙直播页把带 anti-code 的播放参数放在 stream.gameStreamInfoList 中，
+	// sFlvUrl 本身只是 /src 基地址，必须拼上 sStreamName 才是可请求的媒体 URL。
+	streamRe := regexp.MustCompile(`"sStreamName":"([^"]+)"\s*,"sFlvUrl":"([^"]+)"\s*,"sFlvUrlSuffix":"([^"]*)"\s*,"sFlvAntiCode":"([^"]*)"`)
+	matches := streamRe.FindAllStringSubmatch(body, -1)
+	if len(matches) == 0 {
+		return nil
+	}
+
+	info := pageInfo("huya", id, pageURL, body)
+	for _, match := range matches {
+		if len(match) < 5 {
+			continue
+		}
+		base := strings.TrimRight(mediaURL(match[2]), "/")
+		stream := mediaURL("https://placeholder.invalid/" + match[1])
+		if parsed, err := url.Parse(stream); err == nil {
+			stream = strings.TrimPrefix(parsed.Path, "/")
+		}
+		antiCode := strings.TrimSpace(match[4])
+		if base == "" || stream == "" {
+			continue
+		}
+		streamURL := base + "/" + stream
+		if antiCode != "" {
+			streamURL += "?" + antiCode
+		}
+		info.Formats = append(info.Formats, model.Format{
+			FormatID: "flv_" + strconv.Itoa(len(info.Formats)+1), URL: streamURL, Ext: "flv",
+			Quality: "直播流", HasVideo: true, HasAudio: true, Headers: headers,
+		})
+	}
+	if len(info.Formats) == 0 {
+		return nil
+	}
+	return info
+}
+
+func (e *Extractor) extractDouyu(client *httpx.Client, body, pageURL, id string, headers map[string]string) (*model.VideoInfo, error) {
+	if id == "" {
+		return nil, fmt.Errorf("无法解析斗鱼房间 ID")
+	}
+	info := pageInfo("douyu", id, pageURL, body)
+	roomName := firstNonEmpty(findCapture(body, `"room_name":"([^"]+)"`), findCapture(body, `roomName[^>]*>([^<]+)<`))
+	info.Title = firstNonEmpty(roomName, info.Title, id)
+	info.CoverURL = firstNonEmpty(info.CoverURL, findCapture(body, `"coverSrc":"([^"]+)"`))
+
+	stream, err := douyuLiveStream(client, id, pageURL, headers)
+	if err != nil {
+		return nil, err
+	}
+	info.Formats = []model.Format{{
+		FormatID: "douyu_live", URL: stream, Ext: "flv", Quality: "直播流",
+		HasVideo: true, HasAudio: true, Headers: headers,
+	}}
+	return info, nil
+}
+
+func douyuLiveStream(client *httpx.Client, roomID, pageURL string, headers map[string]string) (string, error) {
+	encURL := "https://www.douyu.com/swf_api/homeH5Enc?rids=" + url.QueryEscape(roomID)
+	encBody, encResp, err := client.GetString(encURL, headers)
+	if err != nil {
+		return "", fmt.Errorf("请求斗鱼播放签名脚本失败: %w", err)
+	}
+	if encResp.StatusCode >= http.StatusBadRequest {
+		return "", fmt.Errorf("斗鱼播放签名脚本 HTTP %d", encResp.StatusCode)
+	}
+	var encoded struct {
+		Data map[string]string `json:"data"`
+	}
+	if err := json.Unmarshal([]byte(encBody), &encoded); err != nil {
+		return "", fmt.Errorf("解析斗鱼播放签名脚本失败: %w", err)
+	}
+	script := encoded.Data["room"+roomID]
+	if script == "" {
+		return "", fmt.Errorf("斗鱼未返回房间播放签名脚本")
+	}
+
+	did := fmt.Sprintf("%x", md5.Sum([]byte(roomID+time.Now().UTC().Format(time.RFC3339Nano))))
+	timestamp := strconv.FormatInt(time.Now().Unix(), 10)
+	vm := goja.New()
+	cryptoJS := vm.NewObject()
+	if err := cryptoJS.Set("MD5", func(call goja.FunctionCall) goja.Value {
+		digest := fmt.Sprintf("%x", md5.Sum([]byte(call.Argument(0).String())))
+		result := vm.NewObject()
+		_ = result.Set("toString", func(goja.FunctionCall) goja.Value { return vm.ToValue(digest) })
+		return result
+	}); err != nil {
+		return "", fmt.Errorf("初始化斗鱼签名环境失败: %w", err)
+	}
+	if err := vm.Set("CryptoJS", cryptoJS); err != nil {
+		return "", fmt.Errorf("初始化斗鱼签名环境失败: %w", err)
+	}
+	value, err := vm.RunString(script + `;ub98484234`)
+	if err != nil {
+		return "", fmt.Errorf("执行斗鱼播放签名失败: %w", err)
+	}
+	sign, ok := goja.AssertFunction(value)
+	if !ok {
+		return "", fmt.Errorf("斗鱼播放签名函数不存在")
+	}
+	result, err := sign(goja.Undefined(), vm.ToValue(roomID), vm.ToValue(did), vm.ToValue(timestamp))
+	if err != nil {
+		return "", fmt.Errorf("计算斗鱼播放签名失败: %w", err)
+	}
+	query := result.String()
+	query += "&cdn=tct-h5&rate=0"
+	playURL := "https://www.douyu.com/lapi/live/getH5Play/" + url.PathEscape(roomID) + "?" + query
+	playBody, playResp, err := client.PostBytes(playURL, "", nil, map[string]string{
+		"Origin": "https://www.douyu.com", "Referer": pageURL, "Accept": "application/json",
+	})
+	if err != nil {
+		return "", fmt.Errorf("请求斗鱼播放地址失败: %w", err)
+	}
+	if playResp.StatusCode >= http.StatusBadRequest {
+		return "", fmt.Errorf("斗鱼播放地址 HTTP %d", playResp.StatusCode)
+	}
+	var payload struct {
+		Error int    `json:"error"`
+		Msg   string `json:"msg"`
+		Data  struct {
+			RTMPURL  string `json:"rtmp_url"`
+			RTMPLive string `json:"rtmp_live"`
+			Online   int    `json:"online"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal([]byte(playBody), &payload); err != nil {
+		return "", fmt.Errorf("解析斗鱼播放地址失败: %w", err)
+	}
+	if payload.Error != 0 || payload.Data.RTMPURL == "" || payload.Data.RTMPLive == "" {
+		if payload.Msg == "" {
+			payload.Msg = "直播间未开播或平台拒绝了播放请求"
+		}
+		return "", fmt.Errorf("斗鱼没有可用播放地址: %s", payload.Msg)
+	}
+	return strings.TrimRight(payload.Data.RTMPURL, "/") + "/" + strings.TrimLeft(payload.Data.RTMPLive, "/"), nil
+}
+
+func findKuaishouPhoto(value any, id string) map[string]any {
+	return findKuaishouMap(value, func(item map[string]any) bool {
+		typename := strings.ToLower(util.AsString(item["__typename"]))
+		return typename == "visionvideodetailphoto" || (id != "" && util.AsString(item["id"]) == id && item["photoUrl"] != nil)
+	})
+}
+
+func findKuaishouAuthor(value any) map[string]any {
+	return findKuaishouMap(value, func(item map[string]any) bool {
+		typename := strings.ToLower(util.AsString(item["__typename"]))
+		return strings.Contains(typename, "author") && util.AsString(item["name"]) != ""
+	})
+}
+
+func findKuaishouMap(value any, match func(map[string]any) bool) map[string]any {
+	switch item := value.(type) {
+	case map[string]any:
+		if match(item) {
+			return item
+		}
+		for _, child := range item {
+			if found := findKuaishouMap(child, match); found != nil {
+				return found
+			}
+		}
+	case []any:
+		for _, child := range item {
+			if found := findKuaishouMap(child, match); found != nil {
+				return found
+			}
+		}
+	}
+	return nil
+}
+
 func collectPageFormats(body string, headers map[string]string) []model.Format {
 	var candidates []mediaCandidate
 	for _, value := range []struct{ key, value string }{
@@ -206,12 +452,32 @@ func collectPageFormats(body string, headers map[string]string) []model.Format {
 			}
 		}
 	}
+	mediaAttrRe := regexp.MustCompile(`(?is)(?:href|src)=["'](https?://[^"']+\.(?:mp4|m3u8|flv)(?:\?[^"']*)?)["']`)
+	for _, match := range mediaAttrRe.FindAllStringSubmatch(body, -1) {
+		if len(match) > 1 {
+			if u := mediaURL(match[1]); u != "" {
+				candidates = append(candidates, mediaCandidate{url: u, key: "page_media"})
+			}
+		}
+	}
 	for _, block := range jsonLDBlocks(body) {
 		var value any
 		if json.Unmarshal([]byte(block), &value) == nil {
 			collectJSONCandidates(value, &candidates)
 		}
 	}
+	for _, name := range []string{"__APOLLO_STATE__", "INIT_STATE"} {
+		if value, ok := embeddedJSONObject(body, name); ok {
+			collectJSONCandidates(value, &candidates)
+		}
+	}
+	if value, ok := embeddedScriptJSON(body, "__UNIVERSAL_DATA_FOR_REHYDRATION__"); ok {
+		collectJSONCandidates(value, &candidates)
+	}
+	return formatsFromCandidates(candidates, headers)
+}
+
+func formatsFromCandidates(candidates []mediaCandidate, headers map[string]string) []model.Format {
 
 	seen := map[string]bool{}
 	formats := make([]model.Format, 0, len(candidates))
@@ -257,7 +523,7 @@ func collectJSONCandidates(value any, candidates *[]mediaCandidate) {
 
 func mediaKey(key string) bool {
 	key = strings.ToLower(key)
-	return strings.Contains(key, "video") || strings.Contains(key, "playaddr") || strings.Contains(key, "playurl") || strings.Contains(key, "downloadaddr") || strings.Contains(key, "contenturl") || strings.Contains(key, "m3u8") || strings.Contains(key, "streamurl") || strings.Contains(key, "hls") || strings.Contains(key, "flv") || strings.Contains(key, "rtmp")
+	return key == "url" || key == "backupurl" || strings.Contains(key, "video") || strings.Contains(key, "playaddr") || strings.Contains(key, "playurl") || strings.Contains(key, "downloadaddr") || strings.Contains(key, "contenturl") || strings.Contains(key, "photourl") || strings.Contains(key, "m3u8") || strings.Contains(key, "streamurl") || strings.Contains(key, "hls") || strings.Contains(key, "flv") || strings.Contains(key, "rtmp")
 }
 
 func jsonLDBlocks(body string) []string {
@@ -320,10 +586,77 @@ func mediaURL(raw string) string {
 func looksLikeMediaURL(raw, key string) bool {
 	low := strings.ToLower(raw)
 	key = strings.ToLower(key)
-	if strings.Contains(key, "video") || strings.Contains(key, "play") || strings.Contains(key, "stream") || strings.Contains(key, "content") || strings.Contains(key, "hls") || strings.Contains(key, "flv") || strings.Contains(key, "rtmp") {
+	if strings.Contains(key, "video") || strings.Contains(key, "play") || strings.Contains(key, "stream") || strings.Contains(key, "content") || strings.Contains(key, "photo") || strings.Contains(key, "hls") || strings.Contains(key, "flv") || strings.Contains(key, "rtmp") {
 		return true
 	}
 	return strings.Contains(low, ".mp4") || strings.Contains(low, ".m3u8") || strings.Contains(low, ".webm") || strings.Contains(low, ".m4s") || strings.Contains(low, "mime=video")
+}
+
+func embeddedJSONObject(body, name string) (map[string]any, bool) {
+	marker := "window." + name
+	start := strings.Index(body, marker)
+	if start < 0 {
+		return nil, false
+	}
+	start += len(marker)
+	assign := strings.Index(body[start:], "{")
+	if assign < 0 {
+		return nil, false
+	}
+	start += assign
+	end := jsonObjectEnd(body, start)
+	if end <= start {
+		return nil, false
+	}
+	var value map[string]any
+	if err := json.Unmarshal([]byte(body[start:end]), &value); err != nil {
+		return nil, false
+	}
+	return value, true
+}
+
+func embeddedScriptJSON(body, id string) (map[string]any, bool) {
+	re := regexp.MustCompile(`(?is)<script[^>]+id=["']` + regexp.QuoteMeta(id) + `["'][^>]*>(.*?)</script>`)
+	match := re.FindStringSubmatch(body)
+	if len(match) < 2 {
+		return nil, false
+	}
+	var value map[string]any
+	if err := json.Unmarshal([]byte(strings.TrimSpace(match[1])), &value); err != nil {
+		return nil, false
+	}
+	return value, true
+}
+
+func jsonObjectEnd(body string, start int) int {
+	depth := 0
+	inString := false
+	escaped := false
+	for i := start; i < len(body); i++ {
+		ch := body[i]
+		if inString {
+			if escaped {
+				escaped = false
+			} else if ch == '\\' {
+				escaped = true
+			} else if ch == '"' {
+				inString = false
+			}
+			continue
+		}
+		switch ch {
+		case '"':
+			inString = true
+		case '{':
+			depth++
+		case '}':
+			depth--
+			if depth == 0 {
+				return i + 1
+			}
+		}
+	}
+	return -1
 }
 
 func mediaExt(raw string) (string, string) {
@@ -400,23 +733,46 @@ func (e *Extractor) extractYouTube(client *httpx.Client, pageURL, id string) (*m
 	if key == "" {
 		key = "AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8"
 	}
-	requestBody, _ := json.Marshal(map[string]any{
-		"context": map[string]any{"client": map[string]string{"clientName": "WEB", "clientVersion": version, "hl": "zh-CN", "gl": "US"}},
-		"videoId": id,
-	})
 	api := "https://www.youtube.com/youtubei/v1/player?key=" + url.QueryEscape(key)
-	apiBody, apiResp, err := client.PostBytes(api, "application/json", requestBody, map[string]string{
-		"Origin": "https://www.youtube.com", "Referer": pageURL, "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
-	})
-	if err != nil {
-		return nil, fmt.Errorf("请求 YouTube 播放信息失败: %w", err)
-	}
-	if apiResp.StatusCode >= http.StatusBadRequest {
-		return nil, fmt.Errorf("YouTube 播放信息 HTTP %d", apiResp.StatusCode)
+	// WEB 在部分网络/版本组合下只返回 signatureCipher 或 UNPLAYABLE；
+	// ANDROID 客户端仍会返回可直接请求的带签名 URL。优先 WEB，缺少直链时回退。
+	clients := []struct{ name, version string }{
+		{"WEB", version},
+		{"ANDROID", "20.10.38"},
 	}
 	var data map[string]any
-	if err := json.Unmarshal(apiBody, &data); err != nil {
-		return nil, fmt.Errorf("解析 YouTube 播放信息失败: %w", err)
+	var lastErr error
+	for _, ytClient := range clients {
+		requestBody, _ := json.Marshal(map[string]any{
+			"context": map[string]any{"client": map[string]string{"clientName": ytClient.name, "clientVersion": ytClient.version, "hl": "zh-CN", "gl": "US"}},
+			"videoId": id,
+		})
+		apiBody, apiResp, requestErr := client.PostBytes(api, "application/json", requestBody, map[string]string{
+			"Origin": "https://www.youtube.com", "Referer": pageURL, "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
+		})
+		if requestErr != nil {
+			lastErr = requestErr
+			continue
+		}
+		if apiResp.StatusCode >= http.StatusBadRequest {
+			lastErr = fmt.Errorf("YouTube 播放信息 HTTP %d", apiResp.StatusCode)
+			continue
+		}
+		var candidate map[string]any
+		if unmarshalErr := json.Unmarshal(apiBody, &candidate); unmarshalErr != nil {
+			lastErr = fmt.Errorf("解析 YouTube 播放信息失败: %w", unmarshalErr)
+			continue
+		}
+		data = candidate
+		if len(youtubeFormats(data, pageHeaders(e.config, pageURL))) > 0 {
+			break
+		}
+	}
+	if data == nil {
+		if lastErr != nil {
+			return nil, fmt.Errorf("请求 YouTube 播放信息失败: %w", lastErr)
+		}
+		return nil, fmt.Errorf("请求 YouTube 播放信息失败")
 	}
 	info := &model.VideoInfo{Platform: "youtube", ID: id, WebpageURL: pageURL}
 	if details := util.AsMap(data["videoDetails"]); details != nil {
@@ -432,9 +788,6 @@ func (e *Extractor) extractYouTube(client *httpx.Client, pageURL, id string) (*m
 		}
 	}
 	info.Formats = youtubeFormats(data, headers)
-	if len(info.Formats) == 0 {
-		info.Formats = collectPageFormats(body, headers)
-	}
 	if len(info.Formats) == 0 {
 		return nil, fmt.Errorf("未找到 YouTube 可下载格式（可能需要 Cookie、PO Token 或地区网络）")
 	}
@@ -461,15 +814,17 @@ func youtubeFormats(data map[string]any, headers map[string]string) []model.Form
 			}
 			mime := util.AsString(m["mimeType"])
 			video := strings.HasPrefix(mime, "video/")
-			audio := strings.HasPrefix(mime, "audio/")
+			vcodec := util.AsString(m["videoCodec"])
+			acodec := util.AsString(m["audioCodec"])
+			audio := strings.HasPrefix(mime, "audio/") || acodec != "" || strings.Contains(mime, "mp4a") || strings.Contains(mime, "opus")
 			if strings.Contains(mime, ";") {
 				video = strings.HasPrefix(mime, "video/")
-				audio = strings.HasPrefix(mime, "audio/")
+				audio = audio || strings.Contains(mime, "mp4a") || strings.Contains(mime, "opus")
 			}
 			formats = append(formats, model.Format{
 				FormatID: util.AsString(m["itag"]), URL: util.AsString(m["url"]), Ext: youtubeExt(mime),
 				Quality: util.FirstString(m, "qualityLabel", "quality"), Width: int(util.ToInt64(m["width"])), Height: int(util.ToInt64(m["height"])),
-				Filesize: util.ToInt64(m["contentLength"]), VCodec: util.AsString(m["videoCodec"]), ACodec: util.AsString(m["audioCodec"]),
+				Filesize: util.ToInt64(m["contentLength"]), VCodec: vcodec, ACodec: acodec,
 				HasVideo: video, HasAudio: audio, Headers: headers, Preference: int(util.ToInt64(m["bitrate"])),
 			})
 		}
@@ -492,7 +847,9 @@ func (e *Extractor) extractTwitter(client *httpx.Client, pageURL, id string) (*m
 	if id == "" {
 		return nil, fmt.Errorf("无法解析 X/Twitter 推文 ID")
 	}
-	api := "https://cdn.syndication.twimg.com/tweet-result?id=" + url.QueryEscape(id) + "&lang=zh"
+	// Syndication API 要求带 token 查询参数；当前公开接口接受 token=0。
+	// 不带该参数时会返回 200 + {}，看起来像成功但不会包含 mediaDetails。
+	api := twitterSyndicationURL(id)
 	body, resp, err := client.GetString(api, map[string]string{"Referer": pageURL, "Accept": "application/json"})
 	if err != nil || resp.StatusCode >= http.StatusBadRequest {
 		if err != nil {
@@ -518,6 +875,14 @@ func (e *Extractor) extractTwitter(client *httpx.Client, pageURL, id string) (*m
 		}
 	}
 	return info, nil
+}
+
+func twitterSyndicationURL(id string) string {
+	query := url.Values{}
+	query.Set("id", id)
+	query.Set("lang", "zh")
+	query.Set("token", "0")
+	return "https://cdn.syndication.twimg.com/tweet-result?" + query.Encode()
 }
 
 func twitterFormats(data map[string]any, headers map[string]string) []model.Format {

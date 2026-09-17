@@ -364,7 +364,16 @@ Apple Music 的搜索和单曲解析可用；当前上游 `music-lib` 的 `GetDo
 ./media-dl video info iqiyi "https://www.iqiyi.com/v_19rrny4w8w.html"
 ./media-dl video info xigua "https://www.ixigua.com/6996881461559165471"
 ./media-dl video info tencent "https://v.qq.com/x/page/q326831cny0.html"
+./media-dl video info youtube "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+./media-dl video info tiktok "https://www.tiktok.com/@_halima_07_/video/7492784957073493256"
+./media-dl video info kuaishou "https://www.kuaishou.com/short-video/3xegqfwigw73xns?authorId=3xriih3dsywmz6k&streamSource=find&area=homexxbrilliant"
+./media-dl video info baidu "https://haokan.baidu.com/v?vid=4851961422851197974&pd=&context="
+./media-dl video info twitter "https://x.com/SEUNGM1NE/status/2100149744349942038?s=20"
+./media-dl video info douyu "https://www.douyu.com/5720533"
+./media-dl video info huya "https://www.huya.com/lpl"
 ```
+
+上面的链接均为排查时使用的公开示例；直播间是否正在直播、短视频是否仍公开，以及平台是否下发直链，都会随时间、地区、Cookie 和风控状态变化。X/Twitter 示例为公开推文视频链接。
 
 ### 输出
 
@@ -492,6 +501,16 @@ Apple Music 的搜索和单曲解析可用；当前上游 `music-lib` 的 `GetDo
 ./media-dl video dl bili "https://www.bilibili.com/video/BV1hRNe6wEzV/?share_source=copy_web&vd_source=db31d99c9cc84c67d33c33e7f08c6620" --cookies cookies.txt
 ./media-dl video dl weibo "https://m.weibo.cn/status/4189191225395228" -o ./downloads
 ./media-dl video dl tencent "https://v.qq.com/x/page/q326831cny0.html" -o ./downloads
+./media-dl video dl youku "https://v.youku.com/v_show/id_XNTA2NTA0MjA1Mg==.html" -o ./downloads
+./media-dl video dl iqiyi "https://www.iqiyi.com/v_19rrny4w8w.html" -o ./downloads
+./media-dl video dl xigua "https://www.ixigua.com/6996881461559165471" -o ./downloads
+./media-dl video dl youtube "https://www.youtube.com/watch?v=dQw4w9WgXcQ" -o ./downloads
+./media-dl video dl tiktok "https://www.tiktok.com/@_halima_07_/video/7492784957073493256" -o ./downloads
+./media-dl video dl kuaishou "https://www.kuaishou.com/short-video/3xegqfwigw73xns?authorId=3xriih3dsywmz6k&streamSource=find&area=homexxbrilliant" -o ./downloads
+./media-dl video dl baidu "https://haokan.baidu.com/v?vid=4851961422851197974&pd=&context=" -o ./downloads
+./media-dl video dl twitter "https://x.com/SEUNGM1NE/status/2100149744349942038?s=20" -o ./downloads
+./media-dl video dl douyu "https://www.douyu.com/5720533" -o ./downloads
+./media-dl video dl huya "https://www.huya.com/lpl" -o ./downloads
 ```
 
 ### 输出
@@ -577,7 +596,7 @@ PC 页有 antibot，主路径走头条移动详情 `m.toutiao.com/i{id}/info/`�
 #### YouTube
 
 - 支持 `youtube.com/watch?v=...`、Shorts、Embed 和 `youtu.be` 短链
-- 使用 YouTube 页面中的 Innertube 播放信息获取一体流或自适应流；分离音视频时由统一下载器调用 `ffmpeg` 合并
+- 使用 YouTube Innertube 播放信息获取可请求的一体流或自适应流；WEB 返回签名流时回退 Android 客户端，分离音视频时由统一下载器调用 `ffmpeg` 合并；WebUI 预览使用官方 embed 播放器
 - 受年龄、地区、登录态或 PO Token 影响的资源，需要提供浏览器 Cookie，部分资源仍可能无法解析
 
 #### TikTok、快手和百度视频
@@ -592,8 +611,8 @@ PC 页有 antibot，主路径走头条移动详情 `m.toutiao.com/i{id}/info/`�
 
 #### 斗鱼和虎牙
 
-- 支持直播间、视频/回放页面中公开暴露的 HLS、FLV 或 MP4 播放地址
-- 直播流地址具有时效性；如果页面没有返回公开播放地址，通常需要登录 Cookie 或平台侧签名，解析器会返回具体失败原因
+- 斗鱼直播间通过页面下发的动态签名脚本请求当前 FLV 流；虎牙直播间从页面的 stream 配置拼接带 anti-code 的 FLV 流
+- 直播流地址具有时效性，示例必须是当前仍可访问的房间；房间未开播、需要权限或平台风控时，解析器会返回具体失败原因
 
 ## Cookie 文件
 

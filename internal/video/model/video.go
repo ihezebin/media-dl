@@ -96,10 +96,12 @@ func (v *VideoInfo) BestFormat() *Format {
 func formatScore(f *Format) int {
 	score := f.Preference
 	if f.HasVideo && f.HasAudio && f.AudioURL == "" {
-		score += 10000
+		// Preference usually stores bitrate, so a small bonus would still make
+		// a high-resolution video-only stream win over a usable muxed stream.
+		score += 100000000
 	}
 	if f.HasVideo && f.AudioURL != "" {
-		score += 5000
+		score += 50000000
 	}
 	score += f.Width*f.Height/1000 + int(f.Filesize/1024/1024)
 	return score

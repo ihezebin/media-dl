@@ -111,7 +111,25 @@ curl -X POST http://127.0.0.1:8080/api/music/download \
 
 ## 视频 API
 
-视频解析器支持 Bilibili、抖音、小红书、微博、优酷、爱奇艺、西瓜、腾讯、YouTube、TikTok、快手、百度视频、X/Twitter、斗鱼和虎牙等 CLI 平台。`platform` 可以省略，服务会根据 URL 自动识别。
+视频解析器支持以下全部平台。`platform` 可以省略，服务会根据 URL 自动识别。下表使用当前排查过的公开视频或直播间；直播状态、短视频公开状态和平台签名都可能随时间变化。
+
+| 平台 | `platform` | 示例 URL |
+| --- | --- | --- |
+| 抖音 | `douyin` | `https://v.douyin.com/coDjy36IwNo/` |
+| Bilibili | `bilibili` | `https://www.bilibili.com/video/BV1hRNe6wEzV/` |
+| 小红书 | `xiaohongshu` | `https://www.xiaohongshu.com/discovery/item/69cf80a20000000022000021?source=webshare&xhsshare=pc_web&xsec_token=ABbwDEgcsNgIRc4tGTKqM9obxwVvdF7AlSh5GHvhaSIhY=&xsec_source=pc_share` |
+| 微博 | `weibo` | `https://m.weibo.cn/status/4189191225395228` |
+| 优酷 | `youku` | `https://v.youku.com/v_show/id_XNTA2NTA0MjA1Mg==.html` |
+| 爱奇艺 | `iqiyi` | `https://www.iqiyi.com/v_19rrny4w8w.html` |
+| 西瓜视频 | `xigua` | `https://www.ixigua.com/6996881461559165471` |
+| 腾讯视频 | `tencent` | `https://v.qq.com/x/page/q326831cny0.html` |
+| YouTube | `youtube` | `https://www.youtube.com/watch?v=dQw4w9WgXcQ` |
+| TikTok | `tiktok` | `https://www.tiktok.com/@_halima_07_/video/7492784957073493256` |
+| 快手 | `kuaishou` | `https://www.kuaishou.com/short-video/3xegqfwigw73xns?authorId=3xriih3dsywmz6k&streamSource=find&area=homexxbrilliant` |
+| 百度视频 | `baidu` | `https://haokan.baidu.com/v?vid=4851961422851197974&pd=&context=` |
+| X/Twitter | `twitter` | `https://x.com/SEUNGM1NE/status/2100149744349942038?s=20` |
+| 斗鱼 | `douyu` | `https://www.douyu.com/5720533` |
+| 虎牙 | `huya` | `https://www.huya.com/lpl` |
 
 ### 解析信息
 
@@ -119,6 +137,14 @@ curl -X POST http://127.0.0.1:8080/api/music/download \
 curl -X POST http://127.0.0.1:8080/api/video/info \
   -H 'Content-Type: application/json' \
   -d '{"url":"https://www.bilibili.com/video/BVxxx"}'
+```
+
+也可以将上表中的任意链接放入同一个接口。例如 X/Twitter：
+
+```bash
+curl -X POST http://127.0.0.1:8080/api/video/info \
+  -H 'Content-Type: application/json' \
+  -d '{"url":"https://x.com/SEUNGM1NE/status/2100149744349942038?s=20"}'
 ```
 
 ### 下载视频
@@ -131,6 +157,15 @@ curl -X POST http://127.0.0.1:8080/api/video/download \
 ```
 
 `format` 默认为 `mp4`，`name` 可指定不含扩展名的文件名。在线下载接口只返回视频本体；B 站 DASH、HLS 和多段视频合并需要 `ffmpeg`。
+
+下载接口对上表中的所有平台使用相同格式：将 `url` 替换为对应示例链接即可。例如：
+
+```bash
+curl -X POST http://127.0.0.1:8080/api/video/download \
+  -H 'Content-Type: application/json' \
+  -d '{"url":"https://x.com/SEUNGM1NE/status/2100149744349942038?s=20","format":"mp4"}' \
+  -o twitter.mp4
+```
 
 视频解析响应中的 `video_url`、`cover_url` 以及格式里的媒体地址始终返回上游原始地址。浏览器预览时由 webui 在请求行为中将地址拼接到同源 `/api/proxy?url=...`，服务端 API 不改写响应数据；服务端执行下载时直接使用原始地址。
 
