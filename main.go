@@ -62,7 +62,7 @@ func main() {
 
 func newRootCommand() *cobra.Command {
 	root := &cobra.Command{
-		Version:       "1.0.2",
+		Version:       "1.0.3",
 		Use:           "media-dl",
 		Short:         "解析并下载多平台视频和音乐",
 		SilenceUsage:  true,
