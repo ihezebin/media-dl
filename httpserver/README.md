@@ -147,6 +147,8 @@ curl -X POST http://127.0.0.1:8080/api/video/info \
   -d '{"url":"https://x.com/SEUNGM1NE/status/2100149744349942038?s=20"}'
 ```
 
+视频解析请求还支持可选的统一 cookie 字段，所有视频平台共用，不会拼接到 URL。抖音遇到 403 时，请从能正常打开抖音的浏览器导出完整 Cookie；通常需要包含 UIFID 或 UIFID_TEMP。WebUI 的“视频 Cookie”配置会将同一个值同时用于解析和下载。
+
 ### 下载视频
 
 ```bash

@@ -19,6 +19,8 @@ yarn dev
 
 开发地址默认为 `http://127.0.0.1:3000`。生产构建使用 `yarn build`，生成的 `dist` 由根目录的 Go HTTP 服务托管。
 
+Vite 开发代理默认将 `/api` 转发到 `http://127.0.0.1:8080`；如果 API 服务使用其他端口，可设置 `VITE_API_TARGET`，例如 `VITE_API_TARGET=http://127.0.0.1:18080 yarn dev`。
+
 ## 页面
 
 - `/`：项目介绍和视频、音乐两个入口。

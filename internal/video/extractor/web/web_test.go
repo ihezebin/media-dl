@@ -74,3 +74,29 @@ func TestYouTubeFormatsRecognizeMuxedStreams(t *testing.T) {
 		t.Fatalf("best format = %+v, want muxed format 18", best)
 	}
 }
+
+func TestCollectPageFormatsDoesNotSelectTikTokMusicAsVideo(t *testing.T) {
+	body := `<script type="application/ld+json">{"music":{"playUrl":"https://cdn.example.test/audio.mp3?mime_type=audio_mpeg"},"video":{"playAddr":"https://cdn.example.test/video.mp4?mime_type=video_mp4"}}</script>`
+	formats := collectPageFormats(body, nil)
+	if len(formats) != 2 {
+		t.Fatalf("formats = %d, want 2", len(formats))
+	}
+	var audio, video *model.Format
+	for i := range formats {
+		switch {
+		case formats[i].URL == "https://cdn.example.test/audio.mp3?mime_type=audio_mpeg":
+			audio = &formats[i]
+		case formats[i].URL == "https://cdn.example.test/video.mp4?mime_type=video_mp4":
+			video = &formats[i]
+		}
+	}
+	if audio == nil || audio.HasVideo || !audio.HasAudio {
+		t.Fatalf("audio format = %+v, want audio-only", audio)
+	}
+	if video == nil || !video.HasVideo || !video.HasAudio {
+		t.Fatalf("video format = %+v, want muxed video", video)
+	}
+	if best := (&model.VideoInfo{Formats: formats}).BestFormat(); best != video {
+		t.Fatalf("best format = %+v, want video format %+v", best, video)
+	}
+}

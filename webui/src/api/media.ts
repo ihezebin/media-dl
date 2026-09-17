@@ -210,15 +210,15 @@ export function downloadMusicAsset(song: MusicSong, action: 'audio' | 'cover' | 
   })
 }
 
-export function getVideoInfo(url: string, platform?: string) {
+export function getVideoInfo(url: string, platform?: string, cookie = '') {
   return request<VideoInfo>('/api/video/info/verified', {
     method: 'POST',
     headers: behaviorCaptchaHeaders(),
-    body: JSON.stringify({ url, platform }),
+    body: JSON.stringify({ url, platform, cookie }),
   })
 }
 
-export function downloadVideo(payload: { url: string; platform?: string; format?: string; name?: string; cover?: boolean }) {
+export function downloadVideo(payload: { url: string; platform?: string; format?: string; name?: string; cover?: boolean; cookie?: string }) {
   return downloadRequest('/api/video/download', {
     method: 'POST',
     body: JSON.stringify(payload),

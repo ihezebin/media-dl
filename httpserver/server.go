@@ -3,8 +3,10 @@ package httpserver
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -47,6 +49,14 @@ type Server struct {
 	captchaStore *behaviorCaptchaStore
 }
 
+var sharedCookieDomains = []string{
+	"douyin.com", "bilibili.com", "xiaohongshu.com", "weibo.com", "weibo.cn", "youku.com", "tudou.com",
+	"iqiyi.com", "iq.com", "ixigua.com", "toutiao.com", "qq.com", "kugou.com", "5sing.kugou.com", "kuwo.cn",
+	"migu.cn", "music.163.com", "qqmusic.qq.com", "qishui.com", "jamendo.com", "joox.com", "apple.com",
+	"music.apple.com", "youtube.com", "youtu.be", "tiktok.com", "kuaishou.com", "kuaishouapp.com", "kwai.com",
+	"baidu.com", "x.com", "twitter.com", "douyu.com", "huya.com",
+}
+
 type appServer interface {
 	RegisterRoutes(...olympus.RegisterRoutes)
 	RegisterOpenAPIUI(string, olympus.OpenAPIUIBuilder) error
@@ -79,7 +89,9 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 		ctx,
 		olympus.WithPort(cfg.Port),
 		olympus.WithServiceName("media-dl"),
-		olympus.WithMiddlewares(corsMiddleware(), middleware.Recovery(), middleware.LoggingRequestWithoutHeader(), middleware.LoggingResponseWithoutHeader()),
+		// Do not enable olympus' request-body logger here: video requests may carry
+		// a full browser Cookie header, which must never be written to logs.
+		olympus.WithMiddlewares(corsMiddleware(), middleware.Recovery(), middleware.LoggingResponseWithoutHeader()),
 		olympus.WithHiddenRoutesLog(),
 	)
 	if err != nil {
@@ -299,6 +311,20 @@ func (s *Server) musicDownload(c *gin.Context, req musicDownloadRequest) (*downl
 type videoInfoRequest struct {
 	Platform string `json:"platform" form:"platform"`
 	URL      string `json:"url" form:"url" openapi:"required"`
+	Cookie   string `json:"cookie,omitempty" form:"cookie" header:"-"`
+}
+
+func (r videoInfoRequest) MarshalJSON() ([]byte, error) {
+	type safeVideoInfoRequest struct {
+		Platform string `json:"platform,omitempty"`
+		URL      string `json:"url,omitempty"`
+		Cookie   string `json:"cookie,omitempty"`
+	}
+	cookie := ""
+	if strings.TrimSpace(r.Cookie) != "" {
+		cookie = "[redacted]"
+	}
+	return json.Marshal(safeVideoInfoRequest{Platform: r.Platform, URL: r.URL, Cookie: cookie})
 }
 
 func (s *Server) videoInfo(_ *gin.Context, req videoInfoRequest) (*model.VideoInfo, error) {
@@ -316,6 +342,7 @@ func (s *Server) videoInfo(_ *gin.Context, req videoInfoRequest) (*model.VideoIn
 	if err != nil {
 		return nil, badRequest(err)
 	}
+	applyCookieHeader(client, req.Cookie)
 	info, err := extractor.Extract(client, platform, req.URL)
 	if err != nil {
 		return nil, badRequest(err)
@@ -336,10 +363,34 @@ type videoDownloadRequest struct {
 	Format   string `json:"format"`
 	Name     string `json:"name"`
 	Cover    bool   `json:"cover"`
+	Cookie   string `json:"cookie,omitempty" header:"-"`
+}
+
+func (r videoDownloadRequest) MarshalJSON() ([]byte, error) {
+	type safeVideoDownloadRequest struct {
+		Platform string `json:"platform,omitempty"`
+		URL      string `json:"url,omitempty"`
+		Format   string `json:"format,omitempty"`
+		Name     string `json:"name,omitempty"`
+		Cover    bool   `json:"cover,omitempty"`
+		Cookie   string `json:"cookie,omitempty"`
+	}
+	cookie := ""
+	if strings.TrimSpace(r.Cookie) != "" {
+		cookie = "[redacted]"
+	}
+	return json.Marshal(safeVideoDownloadRequest{
+		Platform: r.Platform,
+		URL:      r.URL,
+		Format:   r.Format,
+		Name:     r.Name,
+		Cover:    r.Cover,
+		Cookie:   cookie,
+	})
 }
 
 func (s *Server) videoDownload(c *gin.Context, req videoDownloadRequest) (*downloadResponse, error) {
-	info, err := s.videoInfo(c, videoInfoRequest{Platform: req.Platform, URL: req.URL})
+	info, err := s.videoInfo(c, videoInfoRequest{Platform: req.Platform, URL: req.URL, Cookie: req.Cookie})
 	if err != nil {
 		return nil, err
 	}
@@ -347,6 +398,7 @@ func (s *Server) videoDownload(c *gin.Context, req videoDownloadRequest) (*downl
 	if err != nil {
 		return nil, badRequest(err)
 	}
+	applyCookieHeader(client, req.Cookie)
 	tempDir, err := os.MkdirTemp("", "media-dl-http-download-")
 	if err != nil {
 		return nil, badRequest(fmt.Errorf("创建临时下载目录失败: %w", err))
@@ -378,11 +430,24 @@ func (s *Server) client() (*httpx.Client, error) {
 		cookies = append(cookies, loaded...)
 	}
 	if raw := strings.TrimSpace(s.config.Cookie); raw != "" {
-		for _, domain := range []string{"douyin.com", "bilibili.com", "xiaohongshu.com", "weibo.com", "weibo.cn", "youku.com", "tudou.com", "iqiyi.com", "iq.com", "ixigua.com", "toutiao.com", "qq.com", "kugou.com", "5sing.kugou.com", "kuwo.cn", "migu.cn", "music.163.com", "qqmusic.qq.com", "qishui.com", "jamendo.com", "joox.com", "apple.com", "music.apple.com", "youtube.com", "youtu.be", "tiktok.com", "kuaishou.com", "kuaishouapp.com", "kwai.com", "baidu.com", "x.com", "twitter.com", "douyu.com", "huya.com"} {
+		for _, domain := range sharedCookieDomains {
 			cookies = append(cookies, httpx.ParseCookieHeader(raw, domain)...)
 		}
 	}
 	return httpx.New(httpx.Options{Proxy: s.config.Proxy, Cookies: cookies})
+}
+
+func applyCookieHeader(client *httpx.Client, raw string) {
+	if client == nil || strings.TrimSpace(raw) == "" {
+		return
+	}
+	for _, domain := range sharedCookieDomains {
+		u, err := url.Parse("https://" + domain + "/")
+		if err != nil {
+			continue
+		}
+		client.HTTP().Jar.SetCookies(u, httpx.ParseCookieHeader(raw, domain))
+	}
 }
 
 func (s *Server) musicCookie() (string, error) {

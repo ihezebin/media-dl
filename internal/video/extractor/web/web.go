@@ -487,8 +487,7 @@ func formatsFromCandidates(candidates []mediaCandidate, headers map[string]strin
 		}
 		seen[item.url] = true
 		ext, protocol := mediaExt(item.url)
-		hasVideo := !strings.Contains(strings.ToLower(item.key), "audio")
-		hasAudio := hasVideo && !strings.Contains(strings.ToLower(item.url), ".m3u8")
+		hasVideo, hasAudio := mediaTypes(item.url, item.key, item.mime)
 		formats = append(formats, model.Format{
 			FormatID: "page_" + strconv.Itoa(len(formats)+1), URL: item.url, Ext: ext,
 			Quality: qualityLabel(item.width, item.height), Width: item.width, Height: item.height,
@@ -499,6 +498,35 @@ func formatsFromCandidates(candidates []mediaCandidate, headers map[string]strin
 	}
 	sort.SliceStable(formats, func(i, j int) bool { return formatRank(formats[i]) > formatRank(formats[j]) })
 	return formats
+}
+
+func mediaTypes(raw, key, mime string) (hasVideo, hasAudio bool) {
+	lowURL := strings.ToLower(raw)
+	lowKey := strings.ToLower(key)
+	lowMime := strings.ToLower(strings.TrimSpace(mime))
+	if parsed, err := url.Parse(raw); err == nil {
+		if queryMime := strings.TrimSpace(parsed.Query().Get("mime_type")); queryMime != "" {
+			lowMime = strings.ToLower(queryMime)
+		}
+	}
+
+	// TikTok exposes the soundtrack beside the video in the same bootstrap
+	// object. Its audio URL is often found through a playUrl key and is
+	// otherwise indistinguishable from a playable video URL without checking
+	// the mime_type query parameter.
+	if strings.Contains(lowMime, "audio") || strings.Contains(lowKey, "audio") {
+		return false, true
+	}
+	if strings.Contains(lowMime, "video") {
+		return true, !strings.Contains(lowMime, "video_only")
+	}
+	if strings.Contains(lowKey, "audio") {
+		return false, true
+	}
+	if strings.Contains(lowURL, ".m3u8") {
+		return true, true
+	}
+	return true, true
 }
 
 func collectJSONCandidates(value any, candidates *[]mediaCandidate) {

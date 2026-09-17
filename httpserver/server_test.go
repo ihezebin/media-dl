@@ -1,17 +1,91 @@
 package httpserver
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
 
+	"github.com/gin-gonic/gin/binding"
+
+	"github.com/hezebin/media-dl/internal/httpx"
 	"github.com/hezebin/media-dl/internal/music"
 )
+
+func TestApplyCookieHeader(t *testing.T) {
+	client, err := httpx.New(httpx.Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	applyCookieHeader(client, "UIFID=uifid-test; ttwid=ttwid-test")
+	for _, rawURL := range []string{"https://www.douyin.com/video/1", "https://www.youtube.com/watch?v=test"} {
+		u, err := url.Parse(rawURL)
+		if err != nil {
+			t.Fatal(err)
+		}
+		cookies := client.HTTP().Jar.Cookies(u)
+		if len(cookies) != 2 {
+			t.Fatalf("cookies for %s = %d, want 2", rawURL, len(cookies))
+		}
+	}
+}
+
+func TestVideoCookieIsNotOverwrittenByRequestHeader(t *testing.T) {
+	tests := []struct {
+		name    string
+		request any
+	}{
+		{name: "info", request: &videoInfoRequest{}},
+		{name: "download", request: &videoDownloadRequest{}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodPost, "/api/video/info", bytes.NewBufferString(`{"cookie":"body-cookie"}`))
+			req.Header.Set("Content-Type", "application/json")
+			req.Header.Set("Cookie", "browser-cookie=must-not-overwrite")
+			if err := binding.JSON.Bind(req, tt.request); err != nil {
+				t.Fatal(err)
+			}
+			if err := binding.Header.Bind(req, tt.request); err != nil {
+				t.Fatal(err)
+			}
+			var got string
+			switch value := tt.request.(type) {
+			case *videoInfoRequest:
+				got = value.Cookie
+			case *videoDownloadRequest:
+				got = value.Cookie
+			}
+			if got != "body-cookie" {
+				t.Fatalf("cookie = %q, want body-cookie", got)
+			}
+		})
+	}
+}
+
+func TestVideoRequestJSONRedactsCookie(t *testing.T) {
+	for _, request := range []any{
+		videoInfoRequest{URL: "https://example.com/video", Cookie: "secret-cookie"},
+		videoDownloadRequest{URL: "https://example.com/video", Cookie: "secret-cookie"},
+	} {
+		encoded, err := json.Marshal(request)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if string(encoded) == "" || bytes.Contains(encoded, []byte("secret-cookie")) {
+			t.Fatalf("JSON leaked cookie: %s", encoded)
+		}
+		if !bytes.Contains(encoded, []byte(`[redacted]`)) {
+			t.Fatalf("JSON did not contain redaction marker: %s", encoded)
+		}
+	}
+}
 
 func TestServerRoutes(t *testing.T) {
 	webDir := t.TempDir()
