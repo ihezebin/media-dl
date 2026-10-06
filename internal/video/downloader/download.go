@@ -363,7 +363,7 @@ func LoadCookiesFile(path string) ([]*http.Cookie, error) {
 	var cookies []*http.Cookie
 	for _, line := range strings.Split(string(data), "\n") {
 		line = strings.TrimSpace(line)
-		if line == "" || strings.HasPrefix(line, "#") {
+		if line == "" || (strings.HasPrefix(line, "#") && !strings.HasPrefix(line, "#HttpOnly_")) {
 			continue
 		}
 		// Netscape: domain flag path secure expiry name value

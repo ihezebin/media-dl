@@ -548,7 +548,8 @@ Apple Music 的搜索和单曲解析可用；当前上游 `music-lib` 的 `GetDo
 - 支持 `xhslink.com` 短链
 - 解析页面 `window.__INITIAL_STATE__`
 - 优先 `originVideoKey` 原片，否则取 `masterUrl` / `backupUrls`
-- 完整分享链接建议保留 `xsec_token`；打不开时加 `--cookies`
+- 完整分享链接建议保留 `xsec_token`；若笔记确实要求登录，再导出浏览器 Cookie 并加 `--cookies cookies.txt`
+- 命令中的分享链接用双引号包住即可，无需在 `?`、`&`、`=` 前加反斜杠
 
 #### 微博
 

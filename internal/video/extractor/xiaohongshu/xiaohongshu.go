@@ -55,10 +55,13 @@ func (e *Extractor) Extract(client *httpx.Client, rawURL string) (*model.VideoIn
 		return nil, fmt.Errorf("无法解析笔记 ID: %s", pageURL)
 	}
 
+	// 该站点可能将带 Go 默认 Accept-Encoding: gzip 的匿名页面请求重定向到登录页。
+	// bytes=0- 请求完整页面，同时避免 net/http 自动添加压缩请求头。
 	headers := map[string]string{
 		"Referer":         "https://www.xiaohongshu.com/",
-		"Accept":          "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+		"Accept":          "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
 		"Accept-Language": "zh-CN,zh;q=0.9",
+		"Range":           "bytes=0-",
 	}
 	body, resp, err := client.GetString(pageURL, headers)
 	if err != nil {
@@ -68,6 +71,9 @@ func (e *Extractor) Extract(client *httpx.Client, rawURL string) (*model.VideoIn
 		return nil, fmt.Errorf("笔记页 HTTP %d", resp.StatusCode)
 	}
 	finalURL := resp.Request.URL.String()
+	if parsed, err := url.Parse(finalURL); err == nil && parsed.Hostname() == "www.xiaohongshu.com" && parsed.Path == "/login" {
+		return nil, fmt.Errorf("笔记页跳转到登录页，请导出浏览器中 xiaohongshu.com 的 Cookie 并使用 --cookies cookies.txt，或使用 --cookie 提供 Cookie 头")
+	}
 	if strings.Contains(finalURL, "/404") || strings.Contains(body, "当前笔记暂时无法浏览") {
 		return nil, fmt.Errorf("笔记不可访问或已失效，请使用带 xsec_token 的完整分享链接，或提供 --cookie")
 	}
@@ -193,6 +199,8 @@ func (e *Extractor) Extract(client *httpx.Client, rawURL string) (*model.VideoIn
 }
 
 func resolveURL(client *httpx.Client, rawURL string) (string, error) {
+	// 分享链接有时从命令行复制时保留了 shell 转义符（尤其是双引号内）。
+	rawURL = strings.NewReplacer(`\?`, "?", `\&`, "&", `\=`, "=", `\#`, "#").Replace(rawURL)
 	if shortURLRe.MatchString(rawURL) {
 		final, err := client.ResolveRedirect(rawURL, map[string]string{
 			"Referer": "https://www.xiaohongshu.com/",
