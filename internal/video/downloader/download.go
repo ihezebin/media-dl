@@ -360,8 +360,13 @@ func LoadCookiesFile(path string) ([]*http.Cookie, error) {
 	if err != nil {
 		return nil, err
 	}
+	return LoadCookiesText(string(data)), nil
+}
+
+// LoadCookiesText parses the Netscape cookies.txt format received from WebUI.
+func LoadCookiesText(data string) []*http.Cookie {
 	var cookies []*http.Cookie
-	for _, line := range strings.Split(string(data), "\n") {
+	for _, line := range strings.Split(data, "\n") {
 		line = strings.TrimSpace(line)
 		if line == "" || (strings.HasPrefix(line, "#") && !strings.HasPrefix(line, "#HttpOnly_")) {
 			continue
@@ -382,5 +387,5 @@ func LoadCookiesFile(path string) ([]*http.Cookie, error) {
 			cookies = append(cookies, httpx.ParseCookieHeader(line, "")...)
 		}
 	}
-	return cookies, nil
+	return cookies
 }

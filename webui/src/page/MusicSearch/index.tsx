@@ -7,7 +7,7 @@ import { Drawer, Input, message, Select, Slider, Spin, Tooltip } from 'antd'
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { CSSProperties } from 'react'
 
-import { downloadMusicAsset, forgetBehaviorCaptcha, getMusicLyrics, getMusicPlatforms, isCaptchaRequired, proxyURL, resolveMusicSong, searchMusic, triggerFileDownload, type MusicSong } from '../../api/media'
+import { downloadMusicAsset, forgetBehaviorCaptcha, getMusicLyrics, getMusicPlatforms, isCaptchaRequired, parseCookieFile, proxyURL, resolveMusicSong, searchMusic, triggerFileDownload, type MusicSong } from '../../api/media'
 import { useBehaviorCaptcha } from '../../components/BehaviorCaptcha/useBehaviorCaptcha'
 
 import styles from './index.module.scss'
@@ -195,6 +195,24 @@ function readStoredPlatformCookies() {
   }
 }
 
+function readStoredCookieFileNames() {
+  if (typeof window === 'undefined') return {}
+  try {
+    const stored = JSON.parse(window.localStorage.getItem(`${cookieStorageKey}.files`) || '{}') as unknown
+    if (!stored || typeof stored !== 'object' || Array.isArray(stored)) return {}
+    return Object.fromEntries(Object.entries(stored).filter(([, value]) => typeof value === 'string' && value.trim()))
+  } catch { return {} }
+}
+
+function readStoredCookieFiles() {
+  if (typeof window === 'undefined') return {}
+  try {
+    const stored = JSON.parse(window.localStorage.getItem(`${cookieStorageKey}.file-values`) || '{}') as unknown
+    if (!stored || typeof stored !== 'object' || Array.isArray(stored)) return {}
+    return Object.fromEntries(Object.entries(stored).filter(([, value]) => typeof value === 'string' && value.trim()))
+  } catch { return {} }
+}
+
 function readStoredNumber(key: string, fallback: number, min: number, max: number) {
   if (typeof window === 'undefined') return fallback
   try {
@@ -211,9 +229,15 @@ export default function MusicSearch() {
   const [platforms, setPlatforms] = useState(defaultPlatforms)
   const [selectedPlatforms, setSelectedPlatforms] = useState(defaultPlatforms)
   const [platformCookies, setPlatformCookies] = useState<Record<string, string>>(readStoredPlatformCookies)
+  const [platformCookieFiles, setPlatformCookieFiles] = useState<Record<string, string>>(readStoredCookieFiles)
+  const [cookieFileDrafts, setCookieFileDrafts] = useState<Record<string, string>>({})
+  const [cookieNameDrafts, setCookieNameDrafts] = useState<Record<string, string>>({})
   const [cookieDrafts, setCookieDrafts] = useState<Record<string, string>>({})
   const [cookiePlatform, setCookiePlatform] = useState('')
   const [cookieDraft, setCookieDraft] = useState('')
+  const [cookieDraftFileName, setCookieDraftFileName] = useState('')
+  const [cookieDraftFileContent, setCookieDraftFileContent] = useState('')
+  const [cookieFileNames, setCookieFileNames] = useState<Record<string, string>>(readStoredCookieFileNames)
   const [cookieAddOpen, setCookieAddOpen] = useState(false)
   const [cookieDrawerOpen, setCookieDrawerOpen] = useState(false)
   const [songs, setSongs] = useState<MusicSong[]>([])
@@ -261,7 +285,8 @@ export default function MusicSearch() {
     audio.addEventListener('timeupdate', onTime); audio.addEventListener('loadedmetadata', onMeta); audio.addEventListener('ended', onEnded); audio.addEventListener('error', onError)
     setLyricLoading(true)
     if (song.url) audio.play().then(() => !cancelled && setIsPlaying(true)).catch(() => !cancelled && setIsPlaying(false))
-    getMusicLyrics(song, platformCookiesRef.current[song.source] || '').then((result) => !cancelled && setLyrics(parseLyrics(result.lyrics))).catch(() => !cancelled && setLyrics([])).finally(() => !cancelled && setLyricLoading(false))
+    const songCookie = platformCookieFiles[song.source] ? '' : (platformCookiesRef.current[song.source] || '')
+    getMusicLyrics(song, songCookie, platformCookieFiles[song.source] || '').then((result) => !cancelled && setLyrics(parseLyrics(result.lyrics))).catch(() => !cancelled && setLyrics([])).finally(() => !cancelled && setLyricLoading(false))
     return () => { cancelled = true; audio.pause(); audio.removeEventListener('timeupdate', onTime); audio.removeEventListener('loadedmetadata', onMeta); audio.removeEventListener('ended', onEnded); audio.removeEventListener('error', onError) }
   }, [playing])
 
@@ -289,7 +314,7 @@ export default function MusicSearch() {
     resultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
     setLoading(true)
     try {
-      const result = await searchMusic({ keyword: keyword.trim(), type, platforms: selectedPlatforms, cookies: platformCookies })
+      const result = await searchMusic({ keyword: keyword.trim(), type, platforms: selectedPlatforms, cookies: Object.fromEntries(Object.entries(platformCookies).filter(([platform]) => !platformCookieFiles[platform])), cookieFiles: platformCookieFiles })
       setSongs(result.results); setSearched(true)
       if (result.errors?.length) message.warning(`${result.errors.length} 个平台搜索失败，已展示可用结果`)
     } catch (error) {
@@ -318,7 +343,7 @@ export default function MusicSearch() {
     if (!startAction(key)) return
     try {
       let playable = song
-      if (!song.url && song.link) playable = await resolveMusicSong({ source: song.source, link: song.link }, platformCookies[song.source] || '')
+      if (!song.url && song.link) playable = await resolveMusicSong({ source: song.source, link: song.link }, platformCookieFiles[song.source] ? '' : (platformCookies[song.source] || ''), platformCookieFiles[song.source] || '')
       if (!playable.url) { message.error('该歌曲没有可用的播放地址'); return }
       setPlaybackRate(1)
       setPlaying(playable)
@@ -340,18 +365,66 @@ export default function MusicSearch() {
     if (song.is_invalid && action === 'audio') { message.warning('该歌曲已标记为无效，无法下载音频'); return }
     const key = songActionKey(song, action)
     if (!startAction(key)) return
-    try { const file = await downloadMusicAsset(song, action, platformCookies[song.source] || ''); triggerFileDownload(file); message.success(`${action === 'audio' ? '歌曲' : action === 'cover' ? '封面' : '歌词'}下载已开始`) } catch (error) { message.error(error instanceof Error ? error.message : '下载失败') } finally { finishAction(key) }
+    try { const file = await downloadMusicAsset(song, action, platformCookieFiles[song.source] ? '' : (platformCookies[song.source] || ''), platformCookieFiles[song.source] || ''); triggerFileDownload(file); message.success(`${action === 'audio' ? '歌曲' : action === 'cover' ? '封面' : '歌词'}下载已开始`) } catch (error) { message.error(error instanceof Error ? error.message : '下载失败') } finally { finishAction(key) }
   }
 
   const togglePlatform = (platform: string) => setSelectedPlatforms((current) => current.includes(platform) ? current.filter((item) => item !== platform) : [...current, platform])
-  const openCookieDrawer = () => { setCookieDrafts({ ...platformCookies }); setCookiePlatform(''); setCookieDraft(''); setCookieAddOpen(false); setCookieDrawerOpen(true) }
-  const changeCookiePlatform = (platform: string) => { setCookiePlatform(platform); setCookieDraft('') }
-  const addCookie = () => { const value = cookieDraft.trim(); if (!cookiePlatform) { message.warning('请先选择平台'); return } if (!value) { message.warning('请粘贴 Cookie 后再添加'); return } setCookieDrafts((current) => ({ ...current, [cookiePlatform]: value })); setCookiePlatform(''); setCookieDraft(''); setCookieAddOpen(false); message.success(`已添加${platformLabels[cookiePlatform] || cookiePlatform} Cookie`) }
+  const openCookieDrawer = () => {
+    setCookieDrafts({ ...platformCookies, ...platformCookieFiles })
+    setCookieFileDrafts({ ...platformCookieFiles })
+    setCookieNameDrafts({ ...cookieFileNames })
+    setCookiePlatform(''); setCookieDraft(''); setCookieDraftFileName(''); setCookieDraftFileContent('')
+    setCookieAddOpen(false); setCookieDrawerOpen(true)
+  }
+  const changeCookiePlatform = (platform: string) => {
+    setCookiePlatform(platform); setCookieDraft(''); setCookieDraftFileName(''); setCookieDraftFileContent('')
+  }
+  const readCookieFile = async (file: File) => {
+    try {
+      const raw = await file.text()
+      if (!parseCookieFile(raw)) { message.warning('未从文件中找到有效的 Netscape Cookie'); return }
+      setCookieDraft(raw); setCookieDraftFileName(file.name); setCookieDraftFileContent(raw)
+      message.success(`已读取 Cookie 文件：${file.name}`)
+    } catch { message.error('读取 Cookie 文件失败，请重新选择') }
+  }
+  const addCookie = () => {
+    if (!cookiePlatform) { message.warning('请先选择平台'); return }
+    const value = cookieDraftFileContent || cookieDraft.trim()
+    if (!value) { message.warning('请粘贴 Cookie 或选择文件'); return }
+    setCookieDrafts((current) => ({ ...current, [cookiePlatform]: value }))
+    setCookieFileDrafts((current) => ({ ...current, [cookiePlatform]: cookieDraftFileContent }))
+    setCookieNameDrafts((current) => ({ ...current, [cookiePlatform]: cookieDraftFileName }))
+    setCookiePlatform(''); setCookieDraft(''); setCookieDraftFileName(''); setCookieDraftFileContent(''); setCookieAddOpen(false)
+  }
   const updateCookie = (platform: string, value: string) => setCookieDrafts((current) => ({ ...current, [platform]: value }))
-  const removeCookie = (platform: string) => setCookieDrafts((current) => { const next = { ...current }; delete next[platform]; return next })
-  const saveCookies = () => { const next = Object.fromEntries(Object.entries(cookieDrafts).map(([platform, value]) => [platform, value.trim()]).filter(([, value]) => value)) as Record<string, string>; setPlatformCookies(next); try { window.localStorage.setItem(cookieStorageKey, JSON.stringify(next)) } catch { message.warning('Cookie 已应用，但写入 localStorage 失败') } setCookieDrawerOpen(false); message.success(`已保存 ${Object.keys(next).length} 个平台 Cookie`) }
-  const cookieEntries = Object.entries(cookieDrafts).filter(([, value]) => value.trim())
-  const availableCookiePlatforms = platforms.filter((platform) => !cookieDrafts[platform]?.trim())
+  const removeCookie = (platform: string) => {
+    setCookieDrafts((current) => { const next = { ...current }; delete next[platform]; return next })
+    setCookieFileDrafts((current) => { const next = { ...current }; delete next[platform]; return next })
+    setCookieNameDrafts((current) => { const next = { ...current }; delete next[platform]; return next })
+  }
+  const saveCookies = () => {
+    const values = { ...cookieDrafts }
+    const fileDrafts = { ...cookieFileDrafts }
+    const names = { ...cookieNameDrafts }
+    // Include the currently selected file/text even if the user saves directly.
+    if (cookiePlatform && (cookieDraftFileContent || cookieDraft.trim())) {
+      values[cookiePlatform] = cookieDraftFileContent || cookieDraft.trim()
+      fileDrafts[cookiePlatform] = cookieDraftFileContent
+      names[cookiePlatform] = cookieDraftFileName
+    }
+    const next = Object.fromEntries(Object.entries(values).filter(([, value]) => value.trim()))
+    const files = Object.fromEntries(Object.entries(fileDrafts).filter(([platform, value]) => next[platform] && value.trim()))
+    const nextNames = Object.fromEntries(Object.entries(names).filter(([platform, value]) => next[platform] && value))
+    setPlatformCookies(next); setPlatformCookieFiles(files); setCookieFileNames(nextNames)
+    try {
+      window.localStorage.setItem(cookieStorageKey, JSON.stringify(next))
+      window.localStorage.setItem(`${cookieStorageKey}.files`, JSON.stringify(nextNames))
+      window.localStorage.setItem(`${cookieStorageKey}.file-values`, JSON.stringify(files))
+    } catch { message.warning('Cookie 已应用，但写入 localStorage 失败') }
+    setCookieDrawerOpen(false); message.success(`已保存 ${Object.keys(next).length} 个平台 Cookie`)
+  }
+  const cookieEntries = Object.entries(cookieDrafts)
+  const availableCookiePlatforms = platforms.filter((platform) => !(platform in cookieDrafts))
   const cookieGuide = cookieGuides[cookiePlatform] || { site: platformLabels[cookiePlatform] || cookiePlatform, steps: ['打开对应平台网站并登录。', '在开发者工具的 Network 面板中刷新或播放歌曲。', '从请求头 Request Headers 复制完整 Cookie。'] }
 
   return <div className={styles.page}>
@@ -393,14 +466,14 @@ export default function MusicSearch() {
         <div className={styles.cookieSectionHead}><strong>已添加的平台</strong><span>{cookieEntries.length} 个</span></div>
         {cookieEntries.length ? <div className={styles.cookieEntries}>{cookieEntries.map(([platform, value]) => <div className={styles.cookieEntry} key={platform}>
           <div className={styles.cookieEntryHead}><div className={styles.cookiePlatform}><span className={styles.cookiePlatformIcon} style={{ '--platform-color': platformColors[platform] || 'var(--app-accent)' } as CSSProperties}><PlatformLogo platform={platform} /></span><div><strong>{platformLabels[platform] || platform}</strong><small>{cookieGuides[platform]?.site || platform}</small></div></div><button type="button" className={styles.cookieRemoveButton} onClick={() => removeCookie(platform)} aria-label={`移除${platformLabels[platform] || platform} Cookie`}><DeleteOutlined /></button></div>
-          <Input.TextArea value={value} onChange={(event) => updateCookie(platform, event.target.value)} rows={4} placeholder="粘贴浏览器请求头中的完整 Cookie 字符串" spellCheck={false} />
+          {cookieNameDrafts[platform] || cookieFileDrafts[platform] ? <><div className={styles.cookieFileSelected}><FileTextOutlined />{cookieNameDrafts[platform] || 'Cookie 文件'}<span>已选文件优先</span></div><pre style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', maxHeight: 160, overflow: 'auto', margin: 0 }} aria-label="Cookie 文件内容">{cookieFileDrafts[platform] || value}</pre></> : <Input.TextArea value={value} onChange={(event) => updateCookie(platform, event.target.value)} rows={4} placeholder="粘贴浏览器请求头中的完整 Cookie 字符串" spellCheck={false} />}
         </div>)}</div> : <div className={styles.cookieEmpty}>还没有添加平台 Cookie</div>}
         {availableCookiePlatforms.length ? <div className={styles.cookieAddArea}>
           <button type="button" className={styles.cookieAddButton} onClick={() => setCookieAddOpen((open) => !open)}><PlusOutlined />添加平台 Cookie</button>
           {cookieAddOpen && <div className={styles.cookieAddForm}>
             <label className={styles.cookieLabel} htmlFor="cookie-platform">选择未添加的平台</label>
             <Select id="cookie-platform" className={styles.cookieSelect} placeholder="选择平台" value={cookiePlatform || undefined} onChange={changeCookiePlatform} options={availableCookiePlatforms.map((platform) => ({ value: platform, label: platformLabels[platform] || platform }))} />
-            {cookiePlatform && <><div className={styles.cookiePlatform}><span className={styles.cookiePlatformIcon} style={{ '--platform-color': platformColors[cookiePlatform] || 'var(--app-accent)' } as CSSProperties}><PlatformLogo platform={cookiePlatform} /></span><div><strong>{platformLabels[cookiePlatform] || cookiePlatform}</strong><small>{cookieGuide.site}</small></div></div><label className={styles.cookieLabel} htmlFor="platform-cookie-value">粘贴 Cookie</label><Input.TextArea id="platform-cookie-value" value={cookieDraft} onChange={(event) => setCookieDraft(event.target.value)} rows={6} placeholder="粘贴浏览器请求头中的完整 Cookie 字符串" spellCheck={false} /><button type="button" className={styles.cookieAddConfirm} onClick={addCookie}><PlusOutlined />添加到待保存列表</button><div className={styles.cookieGuide}><h3><LinkOutlined />如何获取并复制</h3><ol>{cookieGuide.steps.map((step) => <li key={step}>{step}</li>)}</ol><p>请复制完整的 Cookie 请求头内容，不要只复制某一个字段。Cookie 过期后重新获取即可。</p></div></>}
+            {cookiePlatform && <><div className={styles.cookiePlatform}><span className={styles.cookiePlatformIcon} style={{ '--platform-color': platformColors[cookiePlatform] || 'var(--app-accent)' } as CSSProperties}><PlatformLogo platform={cookiePlatform} /></span><div><strong>{platformLabels[cookiePlatform] || cookiePlatform}</strong><small>{cookieGuide.site}</small></div></div><label className={styles.cookieFileButton} htmlFor="platform-cookie-file"><FileTextOutlined />选择 Cookie 文件</label><input id="platform-cookie-file" type="file" accept=".txt,text/plain" hidden onChange={(event) => { const file = event.target.files?.[0]; if (file) void readCookieFile(file); event.currentTarget.value = '' }} />{cookieDraftFileName ? <><div className={styles.cookieFileSelected}><FileTextOutlined />{cookieDraftFileName}<span>已选文件优先</span></div><pre style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', maxHeight: 160, overflow: 'auto', margin: 0 }} aria-label="待保存 Cookie 文件内容">{cookieDraftFileContent}</pre></> : <><label className={styles.cookieLabel} htmlFor="platform-cookie-value">粘贴 Cookie</label><Input.TextArea id="platform-cookie-value" value={cookieDraft} onChange={(event) => setCookieDraft(event.target.value)} rows={6} placeholder="粘贴浏览器请求头中的完整 Cookie 字符串" spellCheck={false} /></>}<button type="button" className={styles.cookieAddConfirm} onClick={addCookie}><PlusOutlined />添加到待保存列表</button><div className={styles.cookieGuide}><h3><LinkOutlined />如何获取并复制</h3><ol>{cookieGuide.steps.map((step) => <li key={step}>{step}</li>)}</ol><p>请复制完整的 Cookie 请求头内容，不要只复制某一个字段。Cookie 过期后重新获取即可。</p></div></>}
           </div>}
         </div> : <div className={styles.cookieAllAdded}>已添加全部可用平台</div>}
         <button type="button" className={styles.cookieSaveButton} onClick={saveCookies}><KeyOutlined />保存全部 Cookie</button>

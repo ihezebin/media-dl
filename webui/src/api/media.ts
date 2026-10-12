@@ -32,10 +32,23 @@ export type VideoInfo = {
   cover_url: string
   webpage_url: string
   video_url: string
-  formats: { format_id: string; quality: string; ext: string; width: number; height: number; has_audio: boolean; has_video: boolean }[]
+  formats: { format_id: string; url: string; audio_url?: string; quality: string; ext: string; width: number; height: number; has_audio: boolean; has_video: boolean }[]
 }
 
 export type DownloadedFile = { blob: Blob; filename: string }
+
+/** Convert a Netscape cookies.txt export to the Cookie request-header format. */
+export function parseCookieFile(text: string) {
+  const pairs: string[] = []
+  for (const rawLine of text.split(/\r?\n/)) {
+    let line = rawLine.trim()
+    if (!line || line.startsWith('#') && !line.startsWith('#HttpOnly_')) continue
+    if (line.startsWith('#HttpOnly_')) line = line.slice('#HttpOnly_'.length)
+    const fields = line.split('\t')
+    if (fields.length >= 7 && fields[5].trim() && fields[6].trim()) pairs.push(`${fields[5].trim()}=${fields[6].trim()}`)
+  }
+  return pairs.join('; ')
+}
 
 type Envelope<T> = { code: number; message?: string; data: T }
 
@@ -175,7 +188,7 @@ export function getMusicPlatforms() {
   return request<{ platforms: string[] }>('/api/music/platforms')
 }
 
-export function searchMusic(params: { keyword: string; type: 'song' | 'artist' | 'album'; platforms: string[]; limit?: number; cookies?: Record<string, string> }) {
+export function searchMusic(params: { keyword: string; type: 'song' | 'artist' | 'album'; platforms: string[]; limit?: number; cookies?: Record<string, string>; cookieFiles?: Record<string, string> }) {
   return request<MusicSearchResponse>('/api/music/search/verified', {
     method: 'POST',
     headers: behaviorCaptchaHeaders(),
@@ -185,40 +198,41 @@ export function searchMusic(params: { keyword: string; type: 'song' | 'artist' |
       platforms: params.platforms,
       limit: params.limit ?? 10,
       cookies: params.cookies ?? {},
+      cookie_files: params.cookieFiles ?? {},
     }),
   })
 }
 
-export function resolveMusicSong(song: Pick<MusicSong, 'source' | 'link'>, cookie = '') {
+export function resolveMusicSong(song: Pick<MusicSong, 'source' | 'link'>, cookie = '', cookieFile = '') {
   return request<MusicSong>('/api/music/resolve', {
     method: 'POST',
-    body: JSON.stringify({ platform: song.source, url: song.link, cookie }),
+    body: JSON.stringify({ platform: song.source, url: song.link, cookie, cookie_file: cookieFile }),
   })
 }
 
-export function getMusicLyrics(song: MusicSong, cookie = '') {
+export function getMusicLyrics(song: MusicSong, cookie = '', cookieFile = '') {
   return request<{ lyrics: string }>('/api/music/lyrics', {
     method: 'POST',
-    body: JSON.stringify({ song, cookie }),
+    body: JSON.stringify({ song, cookie, cookie_file: cookieFile }),
   })
 }
 
-export function downloadMusicAsset(song: MusicSong, action: 'audio' | 'cover' | 'lyrics', cookie = '') {
+export function downloadMusicAsset(song: MusicSong, action: 'audio' | 'cover' | 'lyrics', cookie = '', cookieFile = '') {
   return downloadRequest('/api/music/download', {
     method: 'POST',
-    body: JSON.stringify({ action, song, cookie }),
+    body: JSON.stringify({ action, song, cookie, cookie_file: cookieFile }),
   })
 }
 
-export function getVideoInfo(url: string, platform?: string, cookie = '') {
+export function getVideoInfo(url: string, platform?: string, cookie = '', cookieFile = '') {
   return request<VideoInfo>('/api/video/info/verified', {
     method: 'POST',
     headers: behaviorCaptchaHeaders(),
-    body: JSON.stringify({ url, platform, cookie }),
+    body: JSON.stringify({ url, platform, cookie, cookie_file: cookieFile }),
   })
 }
 
-export function downloadVideo(payload: { url: string; platform?: string; format?: string; name?: string; cover?: boolean; cookie?: string }) {
+export function downloadVideo(payload: { url: string; platform?: string; format?: string; name?: string; cover?: boolean; cookie?: string; cookie_file?: string }) {
   return downloadRequest('/api/video/download', {
     method: 'POST',
     body: JSON.stringify(payload),

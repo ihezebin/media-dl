@@ -36,6 +36,30 @@ func TestApplyCookieHeader(t *testing.T) {
 	}
 }
 
+func TestCookieHeaderFromTextForPlatformFiltersDomains(t *testing.T) {
+	raw := "# Netscape HTTP Cookie File\n" +
+		".kugou.com\tTRUE\t/\tFALSE\t0\tkg_mid\tkugou-value\n" +
+		".music.163.com\tTRUE\t/\tFALSE\t0\tMUSIC_U\tnetease-value\n" +
+		"atc.bmw-brilliance.cn\tFALSE\t/\tFALSE\t0\tSESSION\tunrelated\n"
+	got, err := cookieHeaderFromTextForPlatform(raw, "kugou")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != "kg_mid=kugou-value" {
+		t.Fatalf("filtered cookie header = %q, want only Kugou cookie", got)
+	}
+}
+
+func TestCookieHeaderFromTextForPlatformKeepsPlainHeader(t *testing.T) {
+	got, err := cookieHeaderFromTextForPlatform("kg_mid=kugou-value; MUSIC_U=netease-value", "kugou")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != "kg_mid=kugou-value; MUSIC_U=netease-value" {
+		t.Fatalf("plain cookie header = %q", got)
+	}
+}
+
 func TestVideoCookieIsNotOverwrittenByRequestHeader(t *testing.T) {
 	tests := []struct {
 		name    string

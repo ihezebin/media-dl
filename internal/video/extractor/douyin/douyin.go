@@ -267,16 +267,19 @@ func fetchDetailWebAPI(client *httpx.Client, awemeID string) (map[string]any, er
 // Douyin web detail endpoint. A-Bogus alone is no longer sufficient: Douyin
 // binds this signature to the uifid cookie minted by its own web page.
 func addWebSignature(client *httpx.Client, query string) (string, map[string]string) {
-	cookies := client.HTTP().Jar.Cookies(&url.URL{Scheme: "https", Host: "www.douyin.com", Path: "/"})
 	uifid, verifyFP := "", ""
-	for _, c := range cookies {
-		switch strings.ToLower(c.Name) {
-		case "uifid", "uifid_temp", "uifidtemp":
-			if uifid == "" {
-				uifid = c.Value
+	for _, host := range []string{"www.douyin.com", "www.iesdouyin.com"} {
+		for _, c := range client.HTTP().Jar.Cookies(&url.URL{Scheme: "https", Host: host, Path: "/"}) {
+			switch strings.ToLower(c.Name) {
+			case "uifid", "uifid_temp", "uifidtemp":
+				if uifid == "" {
+					uifid = c.Value
+				}
+			case "s_v_web_id":
+				if verifyFP == "" {
+					verifyFP = c.Value
+				}
 			}
-		case "s_v_web_id":
-			verifyFP = c.Value
 		}
 	}
 	if uifid == "" {
@@ -303,7 +306,8 @@ func webQueryEscape(value string) string {
 	// set: spaces are %20 and ~ is escaped, while *-._ remain unchanged.
 	value = url.QueryEscape(value)
 	value = strings.ReplaceAll(value, "+", "%20")
-	return strings.ReplaceAll(value, "~", "%7E")
+	value = strings.ReplaceAll(value, "~", "%7E")
+	return strings.ReplaceAll(value, "%2A", "*")
 }
 
 func fetchDetailWebPage(client *httpx.Client, awemeID string) (map[string]any, error) {

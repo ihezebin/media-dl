@@ -55,3 +55,22 @@ func TestAddWebSignatureWithoutVisitorCookie(t *testing.T) {
 		t.Fatalf("query/headers = %q/%v, want unchanged/nil", got, headers)
 	}
 }
+
+func TestWebQueryEscapeMatchesURLSearchParams(t *testing.T) {
+	got := webQueryEscape("a b~*_.-")
+	if got != "a%20b%7E*_.-" {
+		t.Fatalf("webQueryEscape() = %q", got)
+	}
+}
+
+func TestAddWebSignatureReadsIesDouyinCookie(t *testing.T) {
+	client, err := httpx.New(httpx.Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	client.HTTP().Jar.SetCookies(&url.URL{Scheme: "https", Host: "www.iesdouyin.com", Path: "/"}, []*http.Cookie{{Name: "uifid", Value: "ies-uifid"}})
+	got, headers := addWebSignature(client, "aid=6383")
+	if headers["uifid"] != "ies-uifid" || !strings.Contains(got, "uifid=ies-uifid") {
+		t.Fatalf("signature did not use iesdouyin cookie: %q / %v", got, headers)
+	}
+}

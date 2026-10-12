@@ -133,9 +133,13 @@ func (e *Extractor) Extract(client *httpx.Client, rawURL string) (*model.VideoIn
 		return nil, err
 	}
 	info.Formats = extractFormats(play, headers)
-	// 额外尝试一体流（免 ffmpeg），参考 yt-dlp 对 legacy format 的补充
-	if play2, err2 := downloadPlayInfo(client, bvid, cid, headers, "1"); err2 == nil {
-		info.Formats = append(info.Formats, extractFormats(play2, headers)...)
+	// 仅在 DASH 不可用时尝试 legacy 一体流。B 站的 durl 通常是低码率
+	// 兼容流；如果与 DASH 一起放入通用 BestFormat，muxed bonus 会错误地
+	// 选中 durl，导致 1080p 视频被降成 360p/低码率。
+	if !hasDASHVideo(info.Formats) {
+		if play2, err2 := downloadPlayInfo(client, bvid, cid, headers, "1"); err2 == nil {
+			info.Formats = append(info.Formats, extractFormats(play2, headers)...)
+		}
 	}
 	if len(info.Formats) == 0 {
 		return nil, fmt.Errorf("未找到可下载清晰度 (可能触发 412/风控，请加 --cookies 或稍后重试)")
@@ -491,6 +495,7 @@ func downloadPlayInfo(client *httpx.Client, bvid string, cid int64, headers map[
 
 func extractFormats(play map[string]any, headers map[string]string) []model.Format {
 	var formats []model.Format
+	hasDASH := false
 	dlHeaders := map[string]string{
 		"Referer": "https://www.bilibili.com/",
 		"Origin":  "https://www.bilibili.com",
@@ -548,6 +553,7 @@ func extractFormats(play map[string]any, headers map[string]string) []model.Form
 				if u == "" {
 					continue
 				}
+				hasDASH = true
 				w := int(toInt64(vm["width"]))
 				h := int(toInt64(vm["height"]))
 				id := fmt.Sprintf("%v", vm["id"])
@@ -572,27 +578,38 @@ func extractFormats(play map[string]any, headers map[string]string) []model.Form
 		}
 	}
 
-	// 传统 durl（音视频一体，优先）
-	if durl, ok := play["durl"].([]any); ok && len(durl) > 0 {
-		if d0, ok := durl[0].(map[string]any); ok {
-			u, _ := d0["url"].(string)
-			if u != "" {
-				q := int(toInt64(play["quality"]))
-				formats = append(formats, model.Format{
-					FormatID:   fmt.Sprintf("durl_%d", q),
-					URL:        u,
-					Ext:        "mp4",
-					Filesize:   toInt64(d0["size"]),
-					HasVideo:   true,
-					HasAudio:   true,
-					Quality:    strconv.Itoa(q),
-					Preference: 100000 + q, // 一体流优先
-					Headers:    dlHeaders,
-				})
+	// 传统 durl（仅在没有可用 DASH 时作为兜底）
+	if !hasDASH {
+		if durl, ok := play["durl"].([]any); ok && len(durl) > 0 {
+			if d0, ok := durl[0].(map[string]any); ok {
+				u, _ := d0["url"].(string)
+				if u != "" {
+					q := int(toInt64(play["quality"]))
+					formats = append(formats, model.Format{
+						FormatID:   fmt.Sprintf("durl_%d", q),
+						URL:        u,
+						Ext:        "mp4",
+						Filesize:   toInt64(d0["size"]),
+						HasVideo:   true,
+						HasAudio:   true,
+						Quality:    strconv.Itoa(q),
+						Preference: 100000 + q, // 一体流优先
+						Headers:    dlHeaders,
+					})
+				}
 			}
 		}
 	}
 	return formats
+}
+
+func hasDASHVideo(formats []model.Format) bool {
+	for _, f := range formats {
+		if strings.HasPrefix(f.FormatID, "dash_") && f.HasVideo {
+			return true
+		}
+	}
+	return false
 }
 
 func firstString(m map[string]any, keys ...string) string {

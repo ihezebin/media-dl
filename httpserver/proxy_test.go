@@ -22,6 +22,22 @@ func TestUnproxyURL(t *testing.T) {
 	}
 }
 
+func TestDefaultMusicProxyHeadersBilibili(t *testing.T) {
+	for _, raw := range []string{
+		"https://cn-jsnt-ct-01-07.bilivideo.com/upgcxcode/video.mp4",
+		"https://xy39x184x180x117xy.mcdn.bilivideo.cn:8082/v1/resource/audio.m4s",
+	} {
+		target, err := url.Parse(raw)
+		if err != nil {
+			t.Fatal(err)
+		}
+		headers := defaultMusicProxyHeaders(target)
+		if headers["Referer"] != "https://www.bilibili.com/" || headers["Origin"] != "https://www.bilibili.com" {
+			t.Fatalf("defaultMusicProxyHeaders(%q) = %#v", raw, headers)
+		}
+	}
+}
+
 func TestUnproxyMusicSong(t *testing.T) {
 	originalURL := "https://cdn.example.com/song.mp3"
 	originalCover := "https://img.example.com/cover.jpg"

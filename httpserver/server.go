@@ -138,14 +138,15 @@ func (s *Server) musicPlatforms(_ *gin.Context, _ olympus.EmptyType) (*platforms
 }
 
 type musicSearchRequest struct {
-	Keyword   string            `json:"keyword"`
-	Type      string            `json:"type"`
-	Artist    string            `json:"artist"`
-	Title     string            `json:"title"`
-	Album     string            `json:"album"`
-	Platforms []string          `json:"platforms"`
-	Limit     int               `json:"limit"`
-	Cookies   map[string]string `json:"cookies"`
+	Keyword     string            `json:"keyword"`
+	Type        string            `json:"type"`
+	Artist      string            `json:"artist"`
+	Title       string            `json:"title"`
+	Album       string            `json:"album"`
+	Platforms   []string          `json:"platforms"`
+	Limit       int               `json:"limit"`
+	Cookies     map[string]string `json:"cookies"`
+	CookieFiles map[string]string `json:"cookie_files"`
 }
 
 func (s *Server) musicSearch(_ *gin.Context, req musicSearchRequest) (*music.SearchResponse, error) {
@@ -163,6 +164,21 @@ func (s *Server) musicSearch(_ *gin.Context, req musicSearchRequest) (*music.Sea
 	case "album":
 		album, keyword = keyword, ""
 	}
+	cookies := req.Cookies
+	if len(req.CookieFiles) > 0 {
+		if cookies == nil {
+			cookies = make(map[string]string)
+		}
+		for platform, raw := range req.CookieFiles {
+			value, fileErr := cookieHeaderFromTextForPlatform(raw, platform)
+			if fileErr != nil {
+				return nil, badRequest(fileErr)
+			}
+			if value != "" {
+				cookies[platform] = value
+			}
+		}
+	}
 	service := music.New(cookie)
 	response, err := service.Search(music.SearchOptions{
 		Keyword:   keyword,
@@ -171,7 +187,7 @@ func (s *Server) musicSearch(_ *gin.Context, req musicSearchRequest) (*music.Sea
 		Album:     album,
 		Platforms: req.Platforms,
 		Limit:     req.Limit,
-		Cookies:   req.Cookies,
+		Cookies:   cookies,
 	})
 	if response == nil && err != nil {
 		return nil, badRequest(err)
@@ -190,9 +206,10 @@ func (s *Server) musicSearchVerified(ctx *gin.Context, req musicSearchRequest) (
 }
 
 type musicResolveRequest struct {
-	Platform string `json:"platform" form:"platform" openapi:"required"`
-	URL      string `json:"url" form:"url" openapi:"required"`
-	Cookie   string `json:"cookie"`
+	Platform   string `json:"platform" form:"platform" openapi:"required"`
+	URL        string `json:"url" form:"url" openapi:"required"`
+	Cookie     string `json:"cookie"`
+	CookieFile string `json:"cookie_file"`
 }
 
 func (s *Server) musicResolve(_ *gin.Context, req musicResolveRequest) (*musicmodel.Song, error) {
@@ -204,13 +221,17 @@ func (s *Server) musicResolve(_ *gin.Context, req musicResolveRequest) (*musicmo
 	if err != nil {
 		return nil, badRequest(err)
 	}
-	cookie := strings.TrimSpace(req.Cookie)
+	cookie, err := requestMusicCookie(req.Cookie, req.CookieFile)
+	if err != nil {
+		return nil, badRequest(err)
+	}
 	if cookie == "" {
 		cookie, err = s.musicCookie()
 		if err != nil {
 			return nil, badRequest(err)
 		}
 	}
+	applyCookieFile(client, req.CookieFile)
 	song, err := music.New(cookie).Parse(client, req.Platform, req.URL)
 	if err != nil {
 		return nil, badRequest(err)
@@ -219,8 +240,9 @@ func (s *Server) musicResolve(_ *gin.Context, req musicResolveRequest) (*musicmo
 }
 
 type musicLyricsRequest struct {
-	Song   musicmodel.Song `json:"song" openapi:"required"`
-	Cookie string          `json:"cookie"`
+	Song       musicmodel.Song `json:"song" openapi:"required"`
+	Cookie     string          `json:"cookie"`
+	CookieFile string          `json:"cookie_file"`
 }
 
 type musicLyricsResponse struct {
@@ -232,8 +254,10 @@ func (s *Server) musicLyrics(_ *gin.Context, req musicLyricsRequest) (*musicLyri
 		return nil, badRequest(fmt.Errorf("歌曲来源为空"))
 	}
 	unproxyMusicSong(&req.Song)
-	cookie := strings.TrimSpace(req.Cookie)
-	var err error
+	cookie, err := requestMusicCookie(req.Cookie, req.CookieFile)
+	if err != nil {
+		return nil, badRequest(err)
+	}
 	if cookie == "" {
 		cookie, err = s.musicCookie()
 		if err != nil {
@@ -252,10 +276,11 @@ func (s *Server) musicLyrics(_ *gin.Context, req musicLyricsRequest) (*musicLyri
 }
 
 type musicDownloadRequest struct {
-	Action   string          `json:"action" openapi:"required"`
-	Song     musicmodel.Song `json:"song" openapi:"required"`
-	Filename string          `json:"filename"`
-	Cookie   string          `json:"cookie"`
+	Action     string          `json:"action" openapi:"required"`
+	Song       musicmodel.Song `json:"song" openapi:"required"`
+	Filename   string          `json:"filename"`
+	Cookie     string          `json:"cookie"`
+	CookieFile string          `json:"cookie_file"`
 }
 
 // downloadResponse 仅用于生成 OpenAPI 响应模型；成功响应实际是二进制附件。
@@ -274,13 +299,17 @@ func (s *Server) musicDownload(c *gin.Context, req musicDownloadRequest) (*downl
 	if err != nil {
 		return nil, badRequest(err)
 	}
-	cookie := strings.TrimSpace(req.Cookie)
+	cookie, err := requestMusicCookie(req.Cookie, req.CookieFile)
+	if err != nil {
+		return nil, badRequest(err)
+	}
 	if cookie == "" {
 		cookie, err = s.musicCookie()
 		if err != nil {
 			return nil, badRequest(err)
 		}
 	}
+	applyCookieFile(client, req.CookieFile)
 	tempDir, err := os.MkdirTemp("", "media-dl-http-download-")
 	if err != nil {
 		return nil, badRequest(fmt.Errorf("创建临时下载目录失败: %w", err))
@@ -309,9 +338,10 @@ func (s *Server) musicDownload(c *gin.Context, req musicDownloadRequest) (*downl
 }
 
 type videoInfoRequest struct {
-	Platform string `json:"platform" form:"platform"`
-	URL      string `json:"url" form:"url" openapi:"required"`
-	Cookie   string `json:"cookie,omitempty" form:"cookie" header:"-"`
+	Platform   string `json:"platform" form:"platform"`
+	URL        string `json:"url" form:"url" openapi:"required"`
+	Cookie     string `json:"cookie,omitempty" form:"cookie" header:"-"`
+	CookieFile string `json:"cookie_file,omitempty" header:"-"`
 }
 
 func (r videoInfoRequest) MarshalJSON() ([]byte, error) {
@@ -343,6 +373,7 @@ func (s *Server) videoInfo(_ *gin.Context, req videoInfoRequest) (*model.VideoIn
 		return nil, badRequest(err)
 	}
 	applyCookieHeader(client, req.Cookie)
+	applyCookieFile(client, req.CookieFile)
 	info, err := extractor.Extract(client, platform, req.URL)
 	if err != nil {
 		return nil, badRequest(err)
@@ -358,12 +389,13 @@ func (s *Server) videoInfoVerified(ctx *gin.Context, req videoInfoRequest) (*mod
 }
 
 type videoDownloadRequest struct {
-	Platform string `json:"platform"`
-	URL      string `json:"url" openapi:"required"`
-	Format   string `json:"format"`
-	Name     string `json:"name"`
-	Cover    bool   `json:"cover"`
-	Cookie   string `json:"cookie,omitempty" header:"-"`
+	Platform   string `json:"platform"`
+	URL        string `json:"url" openapi:"required"`
+	Format     string `json:"format"`
+	Name       string `json:"name"`
+	Cover      bool   `json:"cover"`
+	Cookie     string `json:"cookie,omitempty" header:"-"`
+	CookieFile string `json:"cookie_file,omitempty" header:"-"`
 }
 
 func (r videoDownloadRequest) MarshalJSON() ([]byte, error) {
@@ -390,7 +422,7 @@ func (r videoDownloadRequest) MarshalJSON() ([]byte, error) {
 }
 
 func (s *Server) videoDownload(c *gin.Context, req videoDownloadRequest) (*downloadResponse, error) {
-	info, err := s.videoInfo(c, videoInfoRequest{Platform: req.Platform, URL: req.URL, Cookie: req.Cookie})
+	info, err := s.videoInfo(c, videoInfoRequest{Platform: req.Platform, URL: req.URL, Cookie: req.Cookie, CookieFile: req.CookieFile})
 	if err != nil {
 		return nil, err
 	}
@@ -399,6 +431,7 @@ func (s *Server) videoDownload(c *gin.Context, req videoDownloadRequest) (*downl
 		return nil, badRequest(err)
 	}
 	applyCookieHeader(client, req.Cookie)
+	applyCookieFile(client, req.CookieFile)
 	tempDir, err := os.MkdirTemp("", "media-dl-http-download-")
 	if err != nil {
 		return nil, badRequest(fmt.Errorf("创建临时下载目录失败: %w", err))
@@ -448,6 +481,99 @@ func applyCookieHeader(client *httpx.Client, raw string) {
 		}
 		client.HTTP().Jar.SetCookies(u, httpx.ParseCookieHeader(raw, domain))
 	}
+}
+
+func applyCookieFile(client *httpx.Client, raw string) {
+	if client == nil || strings.TrimSpace(raw) == "" {
+		return
+	}
+	for _, domain := range sharedCookieDomains {
+		u, err := url.Parse("https://" + domain + "/")
+		if err != nil {
+			continue
+		}
+		client.HTTP().Jar.SetCookies(u, downloader.LoadCookiesText(raw))
+	}
+}
+
+func cookieHeaderFromText(raw string) (string, error) {
+	if strings.TrimSpace(raw) == "" {
+		return "", nil
+	}
+	return cookieHeaderFromCookies(downloader.LoadCookiesText(raw))
+}
+
+// cookieHeaderFromTextForPlatform converts a Netscape export to the header
+// expected by a music provider. Browser exports commonly contain cookies for
+// hundreds of unrelated sites; sending all of them can make the upstream
+// request invalid or exceed its header limits. Plain Cookie headers have no
+// domain and are retained as-is.
+func cookieHeaderFromTextForPlatform(raw, platform string) (string, error) {
+	cookies := downloader.LoadCookiesText(raw)
+	canon, err := music.NormalizePlatform(platform)
+	if err != nil {
+		return "", err
+	}
+	allowed := musicCookieDomains[canon]
+	filtered := make([]*http.Cookie, 0, len(cookies))
+	for _, cookie := range cookies {
+		if cookie == nil || cookie.Name == "" {
+			continue
+		}
+		if cookie.Domain == "" || cookieDomainMatches(cookie.Domain, allowed) {
+			filtered = append(filtered, cookie)
+		}
+	}
+	if len(filtered) == 0 {
+		return "", nil
+	}
+	return cookieHeaderFromCookies(filtered)
+}
+
+func cookieHeaderFromCookies(cookies []*http.Cookie) (string, error) {
+	if len(cookies) == 0 {
+		return "", fmt.Errorf("Cookie 文件中未找到有效 Cookie")
+	}
+	parts := make([]string, 0, len(cookies))
+	for _, cookie := range cookies {
+		if cookie != nil && cookie.Name != "" {
+			parts = append(parts, cookie.Name+"="+cookie.Value)
+		}
+	}
+	return strings.Join(parts, "; "), nil
+}
+
+var musicCookieDomains = map[string][]string{
+	"netease":  {"163.com"},
+	"qq":       {"qq.com"},
+	"kugou":    {"kugou.com"},
+	"kuwo":     {"kuwo.cn", "kuwo.com"},
+	"migu":     {"migu.cn"},
+	"fivesing": {"5sing.com", "kugou.com"},
+	"qianqian": {"baidu.com"},
+	"soda":     {"qishui.com"},
+	"jamendo":  {"jamendo.com"},
+	"joox":     {"joox.com"},
+	"bilibili": {"bilibili.com"},
+	"apple":    {"apple.com"},
+}
+
+func cookieDomainMatches(domain string, allowed []string) bool {
+	domain = strings.TrimPrefix(strings.ToLower(strings.TrimSpace(domain)), ".")
+	for _, suffix := range allowed {
+		suffix = strings.TrimPrefix(strings.ToLower(strings.TrimSpace(suffix)), ".")
+		if domain == suffix || strings.HasSuffix(domain, "."+suffix) {
+			return true
+		}
+	}
+	return false
+}
+
+func requestMusicCookie(raw, file string) (string, error) {
+	if strings.TrimSpace(file) != "" {
+		return cookieHeaderFromText(file)
+	}
+	return strings.TrimSpace(raw), nil
 }
 
 func (s *Server) musicCookie() (string, error) {

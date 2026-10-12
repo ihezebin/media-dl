@@ -134,6 +134,16 @@ func defaultMusicProxyHeaders(target *url.URL) map[string]string {
 	if strings.HasSuffix(host, "kwaicdn.com") || strings.HasSuffix(host, "yximgs.com") {
 		return map[string]string{"Referer": "https://www.kuaishou.com/"}
 	}
+	// Bilibili's media CDNs reject requests without the page origin headers
+	// (the browser's video request cannot set these cross-origin headers itself).
+	// Keep this for both bilivideo.com and bilivideo.cn, which are used for
+	// normal and mcdn video/audio endpoints respectively.
+	if strings.HasSuffix(host, "bilivideo.com") || strings.HasSuffix(host, "bilivideo.cn") {
+		return map[string]string{
+			"Referer": "https://www.bilibili.com/",
+			"Origin":  "https://www.bilibili.com",
+		}
+	}
 	return nil
 }
 
