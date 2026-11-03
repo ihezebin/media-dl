@@ -73,7 +73,7 @@ make build
 make server
 ```
 
-如果使用 Docker Compose，则不需要先执行 `make build` 或 `make server`。直接执行 `make docker-up` 即可；Compose 会在镜像构建过程中自动构建前端和 Go 服务，下载请求由服务端在线返回：
+如果使用 Docker Compose，直接执行 `make docker-up` 即可；它会先在本机构建前端与 Linux Go 后端，再将产物复制到同一个镜像并启动，容器内不下载前后端依赖、不编译源码。下载请求由服务端在线返回：
 
 ```bash
 make docker-up
@@ -82,6 +82,7 @@ make docker-up
 `make docker-up` 实际使用 [docker-compose.local.yml](./docker-compose.local.yml)，默认访问 `http://127.0.0.1:8080/`，停止服务执行 `make docker-down`。也可以直接执行：
 
 ```bash
+make package-build
 docker compose -f docker-compose.local.yml up --build
 ```
 
@@ -111,7 +112,9 @@ make package
 ccr.ccs.tencentyun.com/hezebin/media-dl:v0.1.0
 ```
 
-它会完成前端构建、后端构建、Docker 镜像构建和推送。当前提交没有 Git tag 时，会使用 Git 提交号作为 tag；生产部署建议使用 GitHub 仓库中已经存在的版本 tag。构建架构默认是 `linux/amd64`，可通过 `DOCKER_PLATFORM` 覆盖。只构建不推送时使用 `make package-local`。
+它会在本机复用现有 `webui/node_modules` 和 Go 模块缓存，构建 `webui/dist` 和 `.package/image/media-dl`（Linux 静态二进制），然后由 Docker 复制这两份产物到同一个镜像 tag 并推送。前端依赖缺失时才执行 `yarn install --frozen-lockfile`；Docker 中只安装 `ca-certificates`、`ffmpeg`、`tzdata` 等运行时包，不安装 Node/Go、不下载前后端依赖、不编译源码。
+
+当前提交没有 Git tag 时，会使用 Git 提交描述作为 tag；生产部署建议使用 GitHub 仓库中已经存在的版本 tag。构建架构默认是 `linux/amd64`，可通过 `DOCKER_PLATFORM=linux/arm64` 等覆盖，本机 Go 交叉编译目标与镜像平台同步。只构建不推送时使用 `make package-local`；只生成前后端产物用 `make package-build`。直接执行 `docker build` 前也必须先生成目标平台对应的产物。
 
 如果不想提前执行 `docker login`，也可以把镜像仓库账号和访问令牌交给 Makefile，由它自动完成登录：
 

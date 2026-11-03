@@ -1,10 +1,9 @@
-.git
-.package
-.DS_Store
-.env
-.env.*
-!.env.example
-bin
-downloads
-webui/node_modules
-webui/dist
+# Only locally built runtime artifacts enter the Docker build context.
+*
+!Dockerfile
+!.package/
+!.package/image/
+!.package/image/media-dl
+!webui/
+!webui/dist/
+!webui/dist/**

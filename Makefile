@@ -11,11 +11,14 @@ DOCKER_NAMESPACE ?= hezebin
 IMAGE_REPOSITORY ?= $(DOCKER_REGISTRY)/$(DOCKER_NAMESPACE)/$(APP)
 IMAGE ?= $(IMAGE_REPOSITORY):$(TAG)
 DOCKER_PLATFORM ?= linux/amd64
+PACKAGE_GOOS = $(word 1,$(subst /, ,$(DOCKER_PLATFORM)))
+PACKAGE_GOARCH = $(word 2,$(subst /, ,$(DOCKER_PLATFORM)))
+PACKAGE_GOARM = $(patsubst v%,%,$(word 3,$(subst /, ,$(DOCKER_PLATFORM))))
 DOCKER_USER ?= $(HEZEBIN_DOCKER_USER)
 DOCKER_PWD ?= $(HEZEBIN_DOCKER_PWD)
 export DOCKER_USER DOCKER_PWD AIR_VERSION
 
-.PHONY: dev build web-build server webui test package package-local login docker-build docker-up docker-down
+.PHONY: dev build web-build server webui test package package-build package-local login docker-build docker-up docker-down
 
 dev:
 	@MEDIA_DL_PORT="$(PORT)" MEDIA_DL_WEB_PORT="$(WEB_PORT)" bash scripts/dev.sh
@@ -24,7 +27,8 @@ build: web-build
 	CGO_ENABLED=0 go build -o bin/$(APP) .
 
 web-build:
-	cd webui && yarn install --frozen-lockfile && yarn build
+	@test -x webui/node_modules/.bin/vite -a -x webui/node_modules/.bin/tsc || (cd webui && yarn install --frozen-lockfile)
+	cd webui && yarn build
 
 server:
 	go run . server --port $(PORT) --web-dir ./webui/dist
@@ -37,11 +41,17 @@ test:
 	cd webui && yarn lint && yarn build
 
 package: package-local
+	$(MAKE) login
 	@echo "==> docker push $(IMAGE)"
 	docker push $(IMAGE)
 	@echo "==> packaged $(IMAGE)"
 
-package-local: login
+package-build: web-build
+	@test "$(PACKAGE_GOOS)" = linux || (echo "DOCKER_PLATFORM must target Linux" >&2; exit 1)
+	mkdir -p .package/image
+	CGO_ENABLED=0 GOOS=$(PACKAGE_GOOS) GOARCH=$(PACKAGE_GOARCH) GOARM=$(PACKAGE_GOARM) go build -trimpath -ldflags='-s -w' -o .package/image/media-dl .
+
+package-local: package-build
 	@echo "==> docker build $(IMAGE)"
 	docker build --pull --platform $(DOCKER_PLATFORM) --build-arg BUILD_TAG=$(TAG) -t $(IMAGE) .
 
@@ -54,10 +64,10 @@ login:
 	fi
 
 docker-build:
-	docker build --build-arg BUILD_TAG=local -t $(APP):local .
+	$(MAKE) package-local TAG=local IMAGE=$(APP):local
 
-docker-up:
-	docker compose -f docker-compose.local.yml up --build
+docker-up: docker-build
+	DOCKER_PLATFORM=$(DOCKER_PLATFORM) docker compose -f docker-compose.local.yml up --no-build
 
 docker-down:
 	docker compose -f docker-compose.local.yml down

@@ -1,6 +1,7 @@
 services:
   media-dl:
     image: media-dl:local
+    platform: "${DOCKER_PLATFORM:-linux/amd64}"
     build:
       context: .
       dockerfile: Dockerfile
