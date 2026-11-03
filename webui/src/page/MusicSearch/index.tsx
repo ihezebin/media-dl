@@ -8,6 +8,8 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { CSSProperties } from 'react'
 
 import { downloadMusicAsset, forgetBehaviorCaptcha, getMusicLyrics, getMusicPlatforms, isCaptchaRequired, parseCookieFile, proxyURL, resolveMusicSong, searchMusic, triggerFileDownload, type MusicSong } from '../../api/media'
+import { playableDuration, playbackSeek } from '../../api/playbackTime'
+import { isTrialSong, needsKugouVerification, songAccessTags } from '../../api/songAccess'
 import { useBehaviorCaptcha } from '../../components/BehaviorCaptcha/useBehaviorCaptcha'
 
 import styles from './index.module.scss'
@@ -17,9 +19,9 @@ const cookieStorageKey = 'media-dl.music.platform-cookies'
 const platformLabels: Record<string, string> = { netease: '网易云', qq: 'QQ音乐', kugou: '酷狗', kuwo: '酷我', migu: '咪咕', fivesing: '5sing', qianqian: '千千', soda: '汽水', jamendo: 'Jamendo', joox: 'JOOX', bilibili: 'Bilibili', apple: 'Apple' }
 const platformColors: Record<string, string> = { netease: '#e43f4f', qq: '#22c875', kugou: '#2f7df6', kuwo: '#5967d8', migu: '#11b8d1', fivesing: '#ef5c98', qianqian: '#3b82f6', soda: '#f59e0b', jamendo: '#2fa85f', joox: '#f06a35', bilibili: '#00aeec', apple: '#5f6675' }
 const searchTypeMeta = [
-  { value: 'song' as const, label: '单曲', hint: '精准定位歌曲', color: '#1677ff' },
-  { value: 'artist' as const, label: '歌手', hint: '查看艺人作品', color: '#8b5cf6' },
-  { value: 'album' as const, label: '专辑', hint: '探索完整专辑', color: '#f97316' },
+  { value: 'song' as const, label: '单曲', hint: '精准定位歌曲', color: 'var(--app-accent)' },
+  { value: 'artist' as const, label: '歌手', hint: '查看艺人作品', color: 'var(--app-accent-deep)' },
+  { value: 'album' as const, label: '专辑', hint: '探索完整专辑', color: 'var(--app-accent-2)' },
 ]
 
 const cookieGuides: Record<string, { site: string; steps: string[] }> = {
@@ -66,7 +68,7 @@ function formatDuration(seconds: number) {
 }
 
 function Artwork({ song, large = false }: { song: MusicSong; large?: boolean }) {
-  const fallback = platformColors[song.source] || '#1677ff'
+  const fallback = platformColors[song.source] || 'var(--app-accent)'
   return <div className={large ? styles.artworkLarge : styles.artwork} style={{ background: song.cover ? undefined : `linear-gradient(145deg, ${fallback}, color-mix(in srgb, var(--app-accent-deep) 55%, var(--app-shell-bg)))` }}>{song.cover ? <img src={proxyURL(song.cover)} alt="" /> : <SoundOutlined />}</div>
 }
 
@@ -155,7 +157,7 @@ function Player({ song, playing, currentTime, duration, lyrics, lyricLoading, vo
   const [volumeOpen, setVolumeOpen] = useState(false)
   const [rateOpen, setRateOpen] = useState(false)
   const activeLyric = findActiveLyricIndex(lyrics, currentTime)
-  const totalDuration = duration || song.duration || 0
+  const totalDuration = playableDuration(duration, isTrialSong(song) ? Number(song.extra?.trial_duration) : 0)
   const progressValue = Math.min(Math.max(currentTime, 0), totalDuration || 1)
 
   useLayoutEffect(() => {
@@ -257,13 +259,14 @@ export default function MusicSearch() {
   const playerSettingsRef = useRef({ volume, muted, playbackRate })
   const resultsRef = useRef<HTMLElement | null>(null)
   const platformCookiesRef = useRef<Record<string, string>>({})
+  const platformCookieFilesRef = useRef<Record<string, string>>({})
   const actionLoadingRef = useRef(new Set<string>())
   const { captcha, captchaLoading, runWithCaptcha } = useBehaviorCaptcha()
 
   playerSettingsRef.current = { volume, muted, playbackRate }
 
   useEffect(() => { getMusicPlatforms().then((result) => { if (result.platforms.length) { setPlatforms(result.platforms); setSelectedPlatforms(result.platforms) } }).catch(() => undefined) }, [])
-  useEffect(() => { platformCookiesRef.current = platformCookies }, [platformCookies])
+  useEffect(() => { platformCookiesRef.current = platformCookies; platformCookieFilesRef.current = platformCookieFiles }, [platformCookies, platformCookieFiles])
   useEffect(() => () => { audioRef.current?.pause(); audioRef.current = null }, [])
 
   useEffect(() => {
@@ -279,14 +282,19 @@ export default function MusicSearch() {
     audio.playbackRate = playerSettings.playbackRate
     audioRef.current = audio
     const onTime = () => setCurrentTime(audio.currentTime)
-    const onMeta = () => setDuration(audio.duration || song.duration || 0)
+    const onMeta = () => setDuration(playableDuration(audio.duration, isTrialSong(song) ? Number(song.extra?.trial_duration) : 0))
     const onEnded = () => setIsPlaying(false)
-    const onError = () => message.error('播放地址不可用，请尝试下载歌曲')
+    const onError = () => {
+      setIsPlaying(false)
+      setSongs((current) => current.map((item) => songActionKey(item, 'play') === songActionKey(song, 'play') ? { ...item, url: '', is_invalid: true, extra: { ...item.extra, invalid_reason: '播放地址已失效，请重新播放以解析音源' } } : item))
+      message.error('播放地址不可用，请重新播放以解析音源')
+    }
     audio.addEventListener('timeupdate', onTime); audio.addEventListener('loadedmetadata', onMeta); audio.addEventListener('ended', onEnded); audio.addEventListener('error', onError)
     setLyricLoading(true)
     if (song.url) audio.play().then(() => !cancelled && setIsPlaying(true)).catch(() => !cancelled && setIsPlaying(false))
-    const songCookie = platformCookieFiles[song.source] ? '' : (platformCookiesRef.current[song.source] || '')
-    getMusicLyrics(song, songCookie, platformCookieFiles[song.source] || '').then((result) => !cancelled && setLyrics(parseLyrics(result.lyrics))).catch(() => !cancelled && setLyrics([])).finally(() => !cancelled && setLyricLoading(false))
+    const songCookieFile = platformCookieFilesRef.current[song.source] || ''
+    const songCookie = songCookieFile ? '' : (platformCookiesRef.current[song.source] || '')
+    getMusicLyrics(song, songCookie, songCookieFile).then((result) => !cancelled && setLyrics(parseLyrics(result.lyrics))).catch(() => !cancelled && setLyrics([])).finally(() => !cancelled && setLyricLoading(false))
     return () => { cancelled = true; audio.pause(); audio.removeEventListener('timeupdate', onTime); audio.removeEventListener('loadedmetadata', onMeta); audio.removeEventListener('ended', onEnded); audio.removeEventListener('error', onError) }
   }, [playing])
 
@@ -306,7 +314,7 @@ export default function MusicSearch() {
   const allSelected = selectedPlatforms.length === platforms.length
   const selectedCount = selectedPlatforms.length
   const invalidCount = useMemo(() => songs.filter((song) => song.is_invalid).length, [songs])
-  const resultHint = useMemo(() => searched ? `${songs.length} 首结果 · ${selectedCount} 个平台${invalidCount ? ` · ${invalidCount} 首无效` : ''}` : '默认展示所有平台', [searched, selectedCount, songs.length, invalidCount])
+  const resultHint = useMemo(() => searched ? `${songs.length} 首结果 · ${selectedCount} 个平台${invalidCount ? ` · ${invalidCount} 首解析待重试` : ''}` : '默认展示所有平台', [searched, selectedCount, songs.length, invalidCount])
 
   const search = async () => {
     if (!keyword.trim()) { message.warning('请输入歌曲名、歌手或专辑'); return }
@@ -338,17 +346,23 @@ export default function MusicSearch() {
   }
 
   const play = async (song: MusicSong) => {
-    if (song.is_invalid) { message.warning('该歌曲已标记为无效，无法播放'); return }
     const key = songActionKey(song, 'play')
     if (!startAction(key)) return
     try {
       let playable = song
-      if (!song.url && song.link) playable = await resolveMusicSong({ source: song.source, link: song.link }, platformCookieFiles[song.source] ? '' : (platformCookies[song.source] || ''), platformCookieFiles[song.source] || '')
+      if ((!song.url || song.is_invalid || isTrialSong(song)) && song.link) playable = await resolveMusicSong({ source: song.source, link: song.link }, platformCookieFiles[song.source] ? '' : (platformCookies[song.source] || ''), platformCookieFiles[song.source] || '')
       if (!playable.url) { message.error('该歌曲没有可用的播放地址'); return }
+      const extra = { ...playable.extra }
+      delete extra.invalid_reason
+      if (isTrialSong(playable) && !extra.trial_duration && song.extra?.trial_duration) extra.trial_duration = song.extra.trial_duration
+      playable = { ...song, ...playable, name: playable.name || song.name, artist: playable.artist || song.artist, album: playable.album || song.album, cover: playable.cover || song.cover, duration: playable.duration || song.duration, is_invalid: false, extra }
+      setSongs((current) => current.map((item) => songActionKey(item, 'play') === key ? playable : item))
       setPlaybackRate(1)
       setPlaying(playable)
     } catch (error) {
-      message.error(error instanceof Error ? error.message : '无法解析播放地址')
+      const reason = error instanceof Error ? error.message : '无法解析播放地址'
+      setSongs((current) => current.map((item) => songActionKey(item, 'play') === key ? { ...item, url: '', is_invalid: true, extra: { ...item.extra, invalid_reason: reason } } : item))
+      message.error(reason)
     } finally {
       finishAction(key)
     }
@@ -362,10 +376,9 @@ export default function MusicSearch() {
   }
 
   const download = async (song: MusicSong, action: 'audio' | 'cover' | 'lyrics') => {
-    if (song.is_invalid && action === 'audio') { message.warning('该歌曲已标记为无效，无法下载音频'); return }
     const key = songActionKey(song, action)
     if (!startAction(key)) return
-    try { const file = await downloadMusicAsset(song, action, platformCookieFiles[song.source] ? '' : (platformCookies[song.source] || ''), platformCookieFiles[song.source] || ''); triggerFileDownload(file); message.success(`${action === 'audio' ? '歌曲' : action === 'cover' ? '封面' : '歌词'}下载已开始`) } catch (error) { message.error(error instanceof Error ? error.message : '下载失败') } finally { finishAction(key) }
+    try { const file = await downloadMusicAsset(action === 'audio' && song.is_invalid ? { ...song, url: '' } : song, action, platformCookieFiles[song.source] ? '' : (platformCookies[song.source] || ''), platformCookieFiles[song.source] || ''); triggerFileDownload(file); if (action === 'audio') setSongs((current) => current.map((item) => { if (songActionKey(item, 'audio') !== key) return item; const extra = { ...item.extra }; delete extra.invalid_reason; return { ...item, is_invalid: false, extra } })); message.success(`${action === 'audio' ? '歌曲' : action === 'cover' ? '封面' : '歌词'}下载已开始`) } catch (error) { const reason = error instanceof Error ? error.message : '下载失败'; if (action === 'audio') setSongs((current) => current.map((item) => songActionKey(item, 'audio') === key ? { ...item, url: '', is_invalid: true, extra: { ...item.extra, invalid_reason: reason } } : item)); message.error(reason) } finally { finishAction(key) }
   }
 
   const togglePlatform = (platform: string) => setSelectedPlatforms((current) => current.includes(platform) ? current.filter((item) => item !== platform) : [...current, platform])
@@ -415,6 +428,10 @@ export default function MusicSearch() {
     const next = Object.fromEntries(Object.entries(values).filter(([, value]) => value.trim()))
     const files = Object.fromEntries(Object.entries(fileDrafts).filter(([platform, value]) => next[platform] && value.trim()))
     const nextNames = Object.fromEntries(Object.entries(names).filter(([platform, value]) => next[platform] && value))
+    setSongs((current) => current.map((song) => {
+      if (next[song.source] === platformCookies[song.source] && files[song.source] === platformCookieFiles[song.source]) return song
+      return { ...song, url: '', is_invalid: true, extra: { ...song.extra, invalid_reason: '登录信息已更新，请重新解析音源' } }
+    }))
     setPlatformCookies(next); setPlatformCookieFiles(files); setCookieFileNames(nextNames)
     try {
       window.localStorage.setItem(cookieStorageKey, JSON.stringify(next))
@@ -458,7 +475,7 @@ export default function MusicSearch() {
       const audioLoading = actionLoading.has(songActionKey(song, 'audio'))
       const lyricsLoading = actionLoading.has(songActionKey(song, 'lyrics'))
       const coverLoading = actionLoading.has(songActionKey(song, 'cover'))
-      return <article className={`${styles.track} ${song.is_invalid ? styles.trackInvalid : ''}`} key={`${song.source}-${song.id}-${index}`}><span className={styles.trackNo}>{String(index + 1).padStart(2, '0')}</span><button type="button" className={styles.trackCoverButton} aria-label={playLoading ? `正在加载 ${song.name}` : `播放 ${song.name}`} aria-busy={playLoading} onClick={() => play(song)} disabled={song.is_invalid || playLoading}><Artwork song={song} /><span className={`${styles.coverPlay} ${playLoading ? styles.coverPlayLoading : ''}`}>{playLoading ? <Spin size="small" /> : <PlayCircleFilled />}</span></button><div className={styles.trackInfo}><h3><span className={styles.trackTitle}>{song.name}</span>{song.is_invalid && <span className={styles.invalidBadge}>{platformCookies[song.source]?.trim() ? '无效' : '无效，可能需要 VIP，可添加 cookie 后尝试'}</span>}</h3><p>{song.artist || '未知歌手'} <span>·</span> {song.album || '未知专辑'}</p></div><span className={styles.source} style={{ '--source-color': platformColors[song.source] || 'var(--app-accent)' } as CSSProperties}>{platformLabels[song.source] || song.source}</span><span className={styles.duration}>{formatDuration(song.duration)}</span><div className={styles.trackActions}><Tooltip title={song.is_invalid ? '歌曲无效' : playLoading ? '正在加载' : '播放'}><button type="button" onClick={() => play(song)} aria-label={playLoading ? '正在加载歌曲' : '播放'} aria-busy={playLoading} disabled={song.is_invalid || playLoading}>{playLoading ? <Spin size="small" /> : <PlayCircleFilled />}</button></Tooltip><Tooltip title={song.is_invalid ? '歌曲无效' : audioLoading ? '正在下载歌曲' : '下载歌曲'}><button type="button" onClick={() => download(song, 'audio')} aria-label={audioLoading ? '正在下载歌曲' : '下载歌曲'} aria-busy={audioLoading} disabled={song.is_invalid || audioLoading}>{audioLoading ? <Spin size="small" /> : <DownloadOutlined />}</button></Tooltip><Tooltip title={lyricsLoading ? '正在下载歌词' : '下载歌词'}><button type="button" onClick={() => download(song, 'lyrics')} aria-label={lyricsLoading ? '正在下载歌词' : '下载歌词'} aria-busy={lyricsLoading} disabled={lyricsLoading}>{lyricsLoading ? <Spin size="small" /> : <FileTextOutlined />}</button></Tooltip><Tooltip title={coverLoading ? '正在下载封面' : '下载封面'}><button type="button" onClick={() => download(song, 'cover')} aria-label={coverLoading ? '正在下载封面' : '下载封面'} aria-busy={coverLoading} disabled={coverLoading}>{coverLoading ? <Spin size="small" /> : <PictureOutlined />}</button></Tooltip></div></article>
+      return <article className={`${styles.track} ${song.is_invalid ? styles.trackInvalid : ''}`} key={`${song.source}-${song.id}-${index}`}><span className={styles.trackNo}>{String(index + 1).padStart(2, '0')}</span><button type="button" className={styles.trackCoverButton} aria-label={playLoading ? `正在加载 ${song.name}` : `播放 ${song.name}`} aria-busy={playLoading} onClick={() => play(song)} disabled={playLoading}><Artwork song={song} /><span className={`${styles.coverPlay} ${playLoading ? styles.coverPlayLoading : ''}`}>{playLoading ? <Spin size="small" /> : <PlayCircleFilled />}</span></button><div className={styles.trackInfo}><h3><span className={styles.trackTitle}>{song.name}</span>{songAccessTags(song).map((tag) => <Tooltip key={tag.label} title={song.extra?.invalid_reason || song.extra?.access_reason || tag.label}><span className={styles.invalidBadge}>{tag.label}</span></Tooltip>)}{needsKugouVerification(song) && <Tooltip title={song.extra?.invalid_reason || song.extra?.access_reason}><a className={styles.invalidBadge} href="https://www.kugou.com/" target="_blank" rel="noreferrer">前往酷狗完成验证 <LinkOutlined /></a></Tooltip>}</h3><p>{song.artist || '未知歌手'} <span>·</span> {song.album || '未知专辑'}</p></div><span className={styles.source} style={{ '--source-color': platformColors[song.source] || 'var(--app-accent)' } as CSSProperties}>{platformLabels[song.source] || song.source}</span><span className={styles.duration}>{isTrialSong(song) ? (Number(song.extra?.trial_duration) > 0 ? `试听 ${formatDuration(Number(song.extra?.trial_duration))}` : '试听') : formatDuration(song.duration)}</span><div className={styles.trackActions}><Tooltip title={song.is_invalid ? '重新解析并播放' : playLoading ? '正在加载' : '播放'}><button type="button" onClick={() => play(song)} aria-label={playLoading ? '正在加载歌曲' : '播放'} aria-busy={playLoading} disabled={playLoading}>{playLoading ? <Spin size="small" /> : <PlayCircleFilled />}</button></Tooltip><Tooltip title={song.is_invalid ? '重新解析并下载' : audioLoading ? '正在下载歌曲' : '下载歌曲'}><button type="button" onClick={() => download(song, 'audio')} aria-label={audioLoading ? '正在下载歌曲' : '下载歌曲'} aria-busy={audioLoading} disabled={audioLoading}>{audioLoading ? <Spin size="small" /> : <DownloadOutlined />}</button></Tooltip><Tooltip title={lyricsLoading ? '正在下载歌词' : '下载歌词'}><button type="button" onClick={() => download(song, 'lyrics')} aria-label={lyricsLoading ? '正在下载歌词' : '下载歌词'} aria-busy={lyricsLoading} disabled={lyricsLoading}>{lyricsLoading ? <Spin size="small" /> : <FileTextOutlined />}</button></Tooltip><Tooltip title={coverLoading ? '正在下载封面' : '下载封面'}><button type="button" onClick={() => download(song, 'cover')} aria-label={coverLoading ? '正在下载封面' : '下载封面'} aria-busy={coverLoading} disabled={coverLoading}>{coverLoading ? <Spin size="small" /> : <PictureOutlined />}</button></Tooltip></div></article>
     })}</div> : <div className={styles.empty}><CustomerServiceOutlined /><p>{searched ? '没有找到匹配的曲目' : '输入关键词开始跨平台搜索'}</p><span>{searched ? '试试调整关键词或平台筛选' : '歌曲、歌手和专辑均可作为搜索类型'}</span></div>}</section>
     <Drawer title="平台 Cookie" placement="right" width={420} open={cookieDrawerOpen} onClose={() => setCookieDrawerOpen(false)}>
       <div className={styles.cookieDrawer}>
@@ -479,7 +496,7 @@ export default function MusicSearch() {
         <button type="button" className={styles.cookieSaveButton} onClick={saveCookies}><KeyOutlined />保存全部 Cookie</button>
       </div>
     </Drawer>
-    {playing && <Player song={playing} playing={isPlaying} currentTime={currentTime} duration={duration} lyrics={lyrics} lyricLoading={lyricLoading} volume={volume} muted={muted} playbackRate={playbackRate} onClose={() => setPlaying(null)} onToggle={togglePlaying} onSeek={(value) => { if (audioRef.current) audioRef.current.currentTime = value; setCurrentTime(value) }} onVolumeChange={setVolume} onMuteChange={setMuted} onPlaybackRateChange={setPlaybackRate} />}
+    {playing && <Player song={playing} playing={isPlaying} currentTime={currentTime} duration={duration} lyrics={lyrics} lyricLoading={lyricLoading} volume={volume} muted={muted} playbackRate={playbackRate} onClose={() => setPlaying(null)} onToggle={togglePlaying} onSeek={(value) => { const audio = audioRef.current; if (!audio) return; const next = playbackSeek(value, playableDuration(audio.duration, isTrialSong(playing) ? Number(playing.extra?.trial_duration) : 0)); if (next === null) return; audio.currentTime = next; setCurrentTime(next) }} onVolumeChange={setVolume} onMuteChange={setMuted} onPlaybackRateChange={setPlaybackRate} />}
     {captcha}
   </div>
 }

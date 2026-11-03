@@ -120,10 +120,16 @@ func (s *Service) provider(name string) (Provider, error) {
 	switch canon {
 	case "netease":
 		p := netease.New(s.cookie)
-		return Provider{Name: canon, Search: p.Search, Parse: p.Parse, GetDownloadURL: p.GetDownloadURL, GetLyrics: p.GetLyrics}, nil
+		return Provider{Name: canon, Search: p.Search, Parse: p.Parse, GetDownloadURL: func(song *musicmodel.Song) (string, error) {
+			// Search probes run concurrently; music-lib caches account state on each instance.
+			return netease.New(s.cookie).GetDownloadURL(song)
+		}, GetLyrics: p.GetLyrics}, nil
 	case "qq":
 		p := qq.New(s.cookie)
-		return Provider{Name: canon, Search: p.Search, Parse: p.Parse, GetDownloadURL: p.GetDownloadURL, GetLyrics: p.GetLyrics}, nil
+		return Provider{Name: canon, Search: p.Search, Parse: p.Parse, GetDownloadURL: func(song *musicmodel.Song) (string, error) {
+			// Search probes run concurrently; music-lib caches account state on each instance.
+			return qq.New(s.cookie).GetDownloadURL(song)
+		}, GetLyrics: p.GetLyrics}, nil
 	case "kugou":
 		p := kugou.New(s.cookie)
 		return Provider{
@@ -132,10 +138,30 @@ func (s *Service) provider(name string) (Provider, error) {
 			SearchCandidates: func(keyword string, limit int) ([]musicmodel.Song, error) {
 				return searchKugouSongs(keyword, limit, s.cookie)
 			},
-			Parse:                  p.Parse,
-			GetDownloadURL:         p.GetDownloadURL,
-			GetDownloadURLFallback: p.GetDownloadURLBySonginfo,
-			GetLyrics:              p.GetLyrics,
+			Parse: p.Parse,
+			GetDownloadURL: func(song *musicmodel.Song) (string, error) {
+				if song.URL != "" && song.Extra["is_trial"] != "1" {
+					return song.URL, nil
+				}
+				song.URL = ""
+				return resolveKugouWeb(song, s.cookie)
+			},
+			GetDownloadURLFallback: func(song *musicmodel.Song) (string, error) {
+				// A separate instance avoids sharing music-lib's mutable VIP cache
+				// between concurrent search probes. App credentials can still use
+				// the library's higher-quality endpoints.
+				legacy := kugou.New(s.cookie)
+				if strings.TrimSpace(s.cookie) != "" {
+					if value, err := legacy.GetDownloadURL(song); err == nil && value != "" {
+						return value, nil
+					}
+					if value, err := legacy.GetDownloadURLBySonginfo(song); err == nil && value != "" {
+						return value, nil
+					}
+				}
+				return resolveKugouMobile(song, s.cookie)
+			},
+			GetLyrics: p.GetLyrics,
 		}, nil
 	case "kuwo":
 		p := kuwo.New(s.cookie)
@@ -157,10 +183,26 @@ func (s *Service) provider(name string) (Provider, error) {
 		return Provider{Name: canon, Search: p.Search, Parse: p.Parse, GetDownloadURL: p.GetDownloadURL, GetLyrics: p.GetLyrics}, nil
 	case "soda":
 		p := soda.New(s.cookie)
-		return Provider{Name: canon, Search: p.Search, Parse: p.Parse, GetDownloadURL: p.GetDownloadURL, GetLyrics: p.GetLyrics}, nil
+		return Provider{Name: canon, Search: p.Search, Parse: p.Parse, GetDownloadURL: func(song *musicmodel.Song) (string, error) {
+			info, err := soda.New(s.cookie).GetDownloadInfo(song)
+			if err != nil {
+				return "", err
+			}
+			if info == nil {
+				return "", fmt.Errorf("平台返回空音频信息")
+			}
+			setExtra(song, "is_trial", fmt.Sprint(info.Duration > 0 && song.Duration > 0 && info.Duration+5 < float64(song.Duration)))
+			if info.PlayAuth != "" {
+				return info.URL + "#auth=" + url.QueryEscape(info.PlayAuth), nil
+			}
+			return info.URL, nil
+		}, GetLyrics: p.GetLyrics}, nil
 	case "bilibili":
 		p := bilibili.New(s.cookie)
-		return Provider{Name: canon, Search: p.Search, Parse: p.Parse, GetDownloadURL: p.GetDownloadURL, GetLyrics: p.GetLyrics}, nil
+		return Provider{Name: canon, Search: p.Search, Parse: p.Parse, GetDownloadURL: func(song *musicmodel.Song) (string, error) {
+			// Search probes run concurrently; music-lib caches account state on each instance.
+			return bilibili.New(s.cookie).GetDownloadURL(song)
+		}, GetLyrics: p.GetLyrics}, nil
 	case "apple":
 		return Provider{
 			Name: canon,
@@ -377,6 +419,33 @@ func (s *Service) Parse(client *httpx.Client, platform, rawURL string) (*musicmo
 		rawURL, err = resolveKugouURL(client, rawURL)
 		if err != nil {
 			return nil, err
+		}
+	}
+	if p.Name == "kugou" {
+		parsed, parseErr := url.Parse(rawURL)
+		if parseErr != nil {
+			return nil, fmt.Errorf("酷狗歌曲链接无效")
+		}
+		if client == nil {
+			client, err = httpx.New(httpx.Options{})
+			if err != nil {
+				return nil, err
+			}
+		}
+		params := parsed.Query()
+		fragment, _ := url.ParseQuery(parsed.Fragment)
+		for key, values := range fragment {
+			params[key] = values
+		}
+		hash := params.Get("hash")
+		if kugouHashValue.MatchString(hash) {
+			song := &musicmodel.Song{Source: p.Name, ID: hash, Link: rawURL, AlbumID: params.Get("album_id"), Extra: map[string]string{"hash": hash, "album_audio_id": params.Get("album_audio_id")}}
+			value, err := s.resolvePlayableURL(p, song, client, s.cookie)
+			if err != nil {
+				return nil, err
+			}
+			song.URL = value
+			return song, nil
 		}
 	}
 	song, parseErr := p.Parse(rawURL)

@@ -95,7 +95,7 @@ func searchKugouSongs(keyword string, limit int, cookie string) ([]musicmodel.So
 			Size:     size,
 			Bitrate:  bitrate,
 			Cover:    cover,
-			Link:     fmt.Sprintf("https://www.kugou.com/song/#hash=%s", finalHash),
+			Link:     fmt.Sprintf("https://www.kugou.com/song/#hash=%s&album_id=%s&album_audio_id=%s", finalHash, url.QueryEscape(item.AlbumID), url.QueryEscape(firstKugouNonEmpty(formatKugouNumber(item.MixSongID), formatKugouNumber(item.ID)))),
 			Extra: map[string]string{
 				"hash":           finalHash,
 				"ogg_320_hash":   item.TransParam.Ogg320Hash,
@@ -109,6 +109,7 @@ func searchKugouSongs(keyword string, limit int, cookie string) ([]musicmodel.So
 				"album_audio_id": firstKugouNonEmpty(formatKugouNumber(item.MixSongID), formatKugouNumber(item.ID)),
 				"album_id":       item.AlbumID,
 				"privilege":      strconv.Itoa(item.Privilege),
+				"trial_duration": kugouTrialDuration(item.TransParam.HashOffset.StartMS, item.TransParam.HashOffset.EndMS),
 			},
 		})
 	}
@@ -142,11 +143,15 @@ type kugouSearchItem struct {
 	Image       string      `json:"Image"`
 	Privilege   int         `json:"Privilege"`
 	TransParam  struct {
+		HashOffset struct {
+			StartMS int64 `json:"start_ms"`
+			EndMS   int64 `json:"end_ms"`
+		} `json:"hash_offset"`
 		Ogg320Hash     string `json:"ogg_320_hash"`
 		Ogg128Hash     string `json:"ogg_128_hash"`
 		Ogg320FileSize int64  `json:"ogg_320_filesize"`
 		Ogg128FileSize int64  `json:"ogg_128_filesize"`
-	} `json:"TransParam"`
+	} `json:"trans_param"`
 }
 
 func kugouItemSize(item kugouSearchItem, hash string) int64 {

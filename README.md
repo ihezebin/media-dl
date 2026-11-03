@@ -56,6 +56,16 @@ go run . server --api-only --port 8080
 
 ## 本地一键部署
 
+开发时执行一个命令，同时启动 Vite 前端和 Air 后端：
+
+```bash
+make dev
+```
+
+默认打开 `http://127.0.0.1:3000/`，前端 `/api` 请求代理到 `http://127.0.0.1:8080/`。前端修改由 Vite 热更新，Go 源码修改由 Air 自动重新编译并重启；Ctrl+C 同时停止前后端。首次运行会按需安装前端依赖和固定版本的 Air（保存在 `.package/tools`）。开发模式保留验证码等 WebUI 接口。
+
+可通过 `make dev PORT=18080 WEB_PORT=13000` 同时调整后端监听端口和前端代理、访问端口。`make package` 仍将构建后的前端与 Go 后端打包到同一个镜像 tag 并推送；只构建不推送用 `make package-local`。
+
 如果不使用 Docker，选择本机直接运行方式。需要先构建前端和 Go 服务，再启动服务：
 
 ```bash
@@ -214,6 +224,10 @@ webui/                    Vite + React 前端
 | `joox`     | JOOX        | `JOOX音乐`          |
 | `bilibili` | Bilibili    | `bili`              |
 | `apple`    | Apple Music | `applemusic`        |
+
+搜索时音源探测失败会保留具体原因，Web UI 显示“解析待重试”，仍可点击播放或下载重新解析，不会仅因连接失败推断歌曲需要 VIP。修改平台 Cookie 后，下一次播放会重新获取音源。
+
+酷狗网页 Cookie 支持 `KuGoo` 中的账号和 token，解析保留专辑及歌曲标识，并按官方网页播放流程刷新权限。仅试听资源会明确标注试听时长，不能作为完整歌曲下载；遇到网页安全验证时，需在酷狗官网完成验证后重试。下载文件扩展名以最终音源格式为准，包括网易云解析返回的 FLAC 等格式。
 
 ### `music search` — 搜索歌曲
 

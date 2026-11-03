@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	musicmodel "github.com/guohuiyuan/music-lib/model"
@@ -357,7 +358,7 @@ func (r videoInfoRequest) MarshalJSON() ([]byte, error) {
 	return json.Marshal(safeVideoInfoRequest{Platform: r.Platform, URL: r.URL, Cookie: cookie})
 }
 
-func (s *Server) videoInfo(_ *gin.Context, req videoInfoRequest) (*model.VideoInfo, error) {
+func (s *Server) videoInfo(c *gin.Context, req videoInfoRequest) (*model.VideoInfo, error) {
 	if strings.TrimSpace(req.URL) == "" {
 		return nil, badRequest(fmt.Errorf("url 不能为空"))
 	}
@@ -368,13 +369,18 @@ func (s *Server) videoInfo(_ *gin.Context, req videoInfoRequest) (*model.VideoIn
 	if platform == "" {
 		return nil, badRequest(fmt.Errorf("无法识别视频平台，请传入 platform"))
 	}
-	client, err := s.client()
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 60*time.Second)
+	defer cancel()
+	client, err := s.clientWithContext(ctx)
 	if err != nil {
 		return nil, badRequest(err)
 	}
 	applyCookieHeader(client, req.Cookie)
 	applyCookieFile(client, req.CookieFile)
 	info, err := extractor.Extract(client, platform, req.URL)
+	if ctx.Err() != nil {
+		return nil, badRequest(fmt.Errorf("视频解析超时或已取消，请检查网络和代理后重试"))
+	}
 	if err != nil {
 		return nil, badRequest(err)
 	}
@@ -454,6 +460,10 @@ func (s *Server) videoDownload(c *gin.Context, req videoDownloadRequest) (*downl
 }
 
 func (s *Server) client() (*httpx.Client, error) {
+	return s.clientWithContext(context.Background())
+}
+
+func (s *Server) clientWithContext(ctx context.Context) (*httpx.Client, error) {
 	var cookies []*http.Cookie
 	if s.config.CookiesFile != "" {
 		loaded, err := downloader.LoadCookiesFile(s.config.CookiesFile)
@@ -467,7 +477,7 @@ func (s *Server) client() (*httpx.Client, error) {
 			cookies = append(cookies, httpx.ParseCookieHeader(raw, domain)...)
 		}
 	}
-	return httpx.New(httpx.Options{Proxy: s.config.Proxy, Cookies: cookies})
+	return httpx.New(httpx.Options{Proxy: s.config.Proxy, Cookies: cookies, Context: ctx})
 }
 
 func applyCookieHeader(client *httpx.Client, raw string) {

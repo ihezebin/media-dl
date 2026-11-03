@@ -17,6 +17,7 @@ const DefaultUA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/5
 
 // Options 控制 HTTP 客户端行为。
 type Options struct {
+	Context context.Context
 	Proxy   string
 	Cookies []*http.Cookie
 	Timeout time.Duration
@@ -26,6 +27,7 @@ type Options struct {
 type Client struct {
 	http    *http.Client
 	timeout time.Duration
+	ctx     context.Context
 }
 
 func New(opts Options) (*Client, error) {
@@ -56,6 +58,10 @@ func New(opts Options) (*Client, error) {
 	}
 
 	transport := http.DefaultTransport.(*http.Transport).Clone()
+	ctx := opts.Context
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	if opts.Proxy != "" {
 		pu, err := url.Parse(opts.Proxy)
 		if err != nil {
@@ -68,7 +74,7 @@ func New(opts Options) (*Client, error) {
 		http: &http.Client{
 			Jar:       jar,
 			Timeout:   timeout,
-			Transport: transport,
+			Transport: contextTransport{base: transport, ctx: ctx},
 			CheckRedirect: func(req *http.Request, via []*http.Request) error {
 				if len(via) >= 10 {
 					return fmt.Errorf("too many redirects")
@@ -77,6 +83,7 @@ func New(opts Options) (*Client, error) {
 			},
 		},
 		timeout: timeout,
+		ctx:     ctx,
 	}, nil
 }
 
@@ -199,7 +206,13 @@ func (c *Client) doWithRetry(req *http.Request, maxRetries int) (*http.Response,
 	var lastErr error
 	for attempt := 0; attempt < maxRetries; attempt++ {
 		// Body 重放需要 GetBody；对本项目多为 GET，直接复用即可。
-		r := req.Clone(context.Background())
+		if err := c.ctx.Err(); err != nil {
+			return nil, err
+		}
+		if err := req.Context().Err(); err != nil {
+			return nil, err
+		}
+		r := req.Clone(req.Context())
 		if req.GetBody != nil {
 			body, err := req.GetBody()
 			if err != nil {
@@ -210,14 +223,22 @@ func (c *Client) doWithRetry(req *http.Request, maxRetries int) (*http.Response,
 		resp, err := c.http.Do(r)
 		if err != nil {
 			lastErr = err
-			sleepBackoff(attempt)
+			if attempt < maxRetries-1 {
+				if err := sleepBackoff(c.ctx, req.Context(), attempt); err != nil {
+					return nil, err
+				}
+			}
 			continue
 		}
 		// 429 / 5xx / 部分 412 可重试
 		if resp.StatusCode == 429 || resp.StatusCode >= 500 || (resp.StatusCode == 412 && attempt < maxRetries-1) {
 			resp.Body.Close()
 			lastErr = fmt.Errorf("HTTP %d", resp.StatusCode)
-			sleepBackoff(attempt)
+			if attempt < maxRetries-1 {
+				if err := sleepBackoff(c.ctx, req.Context(), attempt); err != nil {
+					return nil, err
+				}
+			}
 			continue
 		}
 		return resp, nil
@@ -225,10 +246,19 @@ func (c *Client) doWithRetry(req *http.Request, maxRetries int) (*http.Response,
 	return nil, fmt.Errorf("request failed after retries: %w", lastErr)
 }
 
-func sleepBackoff(attempt int) {
+func sleepBackoff(ctx, requestCtx context.Context, attempt int) error {
 	base := time.Duration(1<<attempt) * time.Second
 	jitter := time.Duration(rand.Intn(500)) * time.Millisecond
-	time.Sleep(base + jitter)
+	timer := time.NewTimer(base + jitter)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-requestCtx.Done():
+		return requestCtx.Err()
+	case <-timer.C:
+		return nil
+	}
 }
 
 // ParseCookieHeader 解析 "a=1; b=2" 形式。
@@ -256,3 +286,32 @@ func ParseCookieHeader(raw, domain string) []*http.Cookie {
 	}
 	return out
 }
+
+// Also bind direct HTTP() calls and response-body reads to the extraction budget.
+type contextTransport struct {
+	base http.RoundTripper
+	ctx  context.Context
+}
+
+func (t contextTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	ctx, cancel := context.WithCancel(req.Context())
+	stop := context.AfterFunc(t.ctx, cancel)
+	if t.ctx.Err() != nil {
+		cancel()
+	}
+	resp, err := t.base.RoundTrip(req.Clone(ctx))
+	if err != nil {
+		stop()
+		cancel()
+		return nil, err
+	}
+	resp.Body = &contextBody{ReadCloser: resp.Body, cleanup: func() { stop(); cancel() }}
+	return resp, nil
+}
+
+type contextBody struct {
+	io.ReadCloser
+	cleanup func()
+}
+
+func (b *contextBody) Close() error { defer b.cleanup(); return b.ReadCloser.Close() }

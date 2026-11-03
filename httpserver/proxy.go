@@ -62,7 +62,7 @@ func (s *Server) proxy(c *gin.Context) {
 		return
 	}
 
-	client, err := s.client()
+	client, err := s.clientWithContext(c.Request.Context())
 	if err != nil {
 		c.JSON(http.StatusBadGateway, gin.H{"code": http.StatusBadGateway, "message": err.Error()})
 		return

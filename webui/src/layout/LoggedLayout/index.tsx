@@ -33,7 +33,7 @@ export default function LoggedLayout() {
       <main className={styles.main}>
         <header className={styles.topbar}>
           <button type="button" className={styles.homeButton} aria-label="返回首页" title="返回首页" onClick={() => navigate('/')}>
-            <img src="/logo.svg" alt="" />
+            <img src="/headphone-cat-logo.webp" width={34} height={34} alt="" />
           </button>
           <div className={styles.topActions}>
             {location.pathname !== '/' && <Tooltip title="返回首页"><button type="button" className={styles.iconButton} aria-label="返回首页" onClick={() => navigate('/')}><HomeOutlined /></button></Tooltip>}

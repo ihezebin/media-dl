@@ -92,42 +92,44 @@ func (s *Service) validateSongs(provider Provider, songs []musicmodel.Song, clie
 }
 
 func (s *Service) resolvePlayableURL(provider Provider, song *musicmodel.Song, client *httpx.Client, cookie string) (string, error) {
-	urls := make([]string, 0, 3)
-	if value := strings.TrimSpace(song.URL); value != "" {
-		urls = append(urls, value)
-	}
-	if provider.GetDownloadURL != nil {
-		if value, err := provider.GetDownloadURL(song); err == nil && strings.TrimSpace(value) != "" {
-			urls = append(urls, value)
-		}
-	}
-	if provider.GetDownloadURLFallback != nil {
-		if value, err := provider.GetDownloadURLFallback(song); err == nil && strings.TrimSpace(value) != "" {
-			urls = append(urls, value)
-		}
-	}
-	if len(urls) == 0 {
-		return "", fmt.Errorf("没有可用下载地址")
-	}
-
-	seen := make(map[string]struct{}, len(urls))
+	seen := map[string]bool{}
 	var reasons []string
-	for _, rawURL := range urls {
-		if _, ok := seen[rawURL]; ok {
+	resolvers := []func(*musicmodel.Song) (string, error){
+		func(song *musicmodel.Song) (string, error) {
+			if provider.Name == "kugou" && song.Extra["is_trial"] == "1" {
+				return "", nil
+			}
+			return song.URL, nil
+		},
+		provider.GetDownloadURL, provider.GetDownloadURLFallback,
+	}
+	for _, resolve := range resolvers {
+		if resolve == nil {
 			continue
 		}
-		seen[rawURL] = struct{}{}
-		status, err := probeDownloadURL(client, rawURL, cookie, provider.Name)
+		value, err := resolve(song)
+		if err != nil {
+			reasons = append(reasons, err.Error())
+			continue
+		}
+		if value == "" || seen[value] {
+			continue
+		}
+		seen[value] = true
+		status, err := probeDownloadURL(client, value, cookie, provider.Name)
 		if err == nil {
-			return rawURL, nil
+			return value, nil
 		}
 		if status > 0 {
 			reasons = append(reasons, "HTTP "+strconv.Itoa(status))
 		} else {
-			reasons = append(reasons, err.Error())
+			reasons = append(reasons, "音源连接失败，请重试")
 		}
 	}
-	return "", fmt.Errorf("下载地址不可用（%s）", strings.Join(uniqueStrings(reasons), ", "))
+	if len(reasons) == 0 {
+		reasons = append(reasons, "没有可用播放地址")
+	}
+	return "", musicResolveError(reasons)
 }
 
 func probeDownloadURL(client *httpx.Client, rawURL, cookie, platform string) (int, error) {
@@ -230,19 +232,32 @@ func uniqueStrings(values []string) []string {
 }
 
 func (s *Service) resolveDownloadURL(provider Provider, song *musicmodel.Song) (string, error) {
-	if provider.GetDownloadURL != nil {
-		if value, err := provider.GetDownloadURL(song); err == nil && strings.TrimSpace(value) != "" {
+	var reasons []string
+	for _, resolve := range []func(*musicmodel.Song) (string, error){provider.GetDownloadURL, provider.GetDownloadURLFallback} {
+		if resolve == nil {
+			continue
+		}
+		value, err := resolve(song)
+		if err == nil && strings.TrimSpace(value) != "" {
 			return value, nil
-		} else if provider.GetDownloadURLFallback == nil && err != nil {
-			return "", err
+		}
+		if err != nil {
+			reasons = append(reasons, err.Error())
 		}
 	}
-	if provider.GetDownloadURLFallback != nil {
-		if value, err := provider.GetDownloadURLFallback(song); err == nil && strings.TrimSpace(value) != "" {
-			return value, nil
-		} else if err != nil {
-			return "", err
+	if len(reasons) == 0 {
+		reasons = append(reasons, "平台返回空下载地址")
+	}
+	return "", musicResolveError(reasons)
+}
+
+// A legacy fallback's payment response cannot establish the current account's
+// entitlement when the official web request was stopped by a challenge.
+func musicResolveError(reasons []string) error {
+	for _, reason := range reasons {
+		if strings.Contains(reason, "酷狗网页需要安全验证") {
+			return fmt.Errorf("%s", reason)
 		}
 	}
-	return "", fmt.Errorf("平台返回空下载地址")
+	return fmt.Errorf("%s", strings.Join(uniqueStrings(reasons), "；"))
 }

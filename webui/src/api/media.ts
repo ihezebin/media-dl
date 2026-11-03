@@ -10,6 +10,8 @@ export type MusicSong = {
   cover: string
   link: string
   is_vip?: boolean
+  is_trial?: boolean
+  requires_login?: boolean
   is_invalid?: boolean
   extra?: Record<string, string>
 }

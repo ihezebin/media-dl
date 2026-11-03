@@ -1,3 +1,20 @@
+.modal {
+  --go-captcha-theme-text-color: var(--app-ink);
+  --go-captcha-theme-bg-color: var(--app-surface-solid);
+  --go-captcha-theme-btn-bg-color: var(--app-accent);
+  --go-captcha-theme-btn-border-color: var(--app-accent);
+  --go-captcha-theme-active-color: var(--app-accent);
+  --go-captcha-theme-border-color: var(--app-line);
+  --go-captcha-theme-icon-color: var(--app-muted);
+  --go-captcha-theme-drag-bar-color: var(--app-soft-purple);
+  --go-captcha-theme-drag-bg-color: var(--app-accent);
+  --go-captcha-theme-round-color: var(--app-line);
+  --go-captcha-theme-loading-icon-color: var(--app-accent);
+  --go-captcha-theme-default-color: var(--app-accent);
+  --go-captcha-theme-default-bg-color: var(--app-soft-purple);
+  --go-captcha-theme-default-border-color: var(--app-accent);
+  --go-captcha-theme-default-hover-color: var(--app-soft-purple);
+}
 .modal :global(.ant-modal-content) { border-radius: 18px; overflow: hidden; }
 .modal :global(.ant-modal-body) { padding: 0 12px 12px; }
 .stage { min-height: 352px; position: relative; display: flex; align-items: center; justify-content: center; overflow: hidden; }
@@ -5,6 +22,6 @@
 .captchaContent :global(img) { user-select: none; -webkit-user-drag: none; }
 .captchaContent :global(.gocaptcha-module_wrapper__Kpdey) { max-width: 100%; }
 .dragContent :global(.gocaptcha-module_picture__LRwbY) { pointer-events: none; }
-.loadingOverlay { position: absolute; inset: 0; z-index: 3; display: flex; align-items: center; justify-content: center; background: rgba(255, 255, 255, .82); backdrop-filter: blur(2px); }
+.loadingOverlay { position: absolute; inset: 0; z-index: 3; display: flex; align-items: center; justify-content: center; background: color-mix(in srgb, var(--app-surface-solid) 82%, transparent); backdrop-filter: blur(2px); }
 .loading { display: flex; flex-direction: column; align-items: center; gap: 12px; color: var(--app-muted); font-size: 13px; }
 @media (max-width: 480px) { .modal :global(.ant-modal) { max-width: calc(100vw - 24px); margin: 12px auto; }.modal :global(.ant-modal-body) { padding-inline: 0; }.stage { min-height: 332px; transform: scale(.94); transform-origin: center; } }

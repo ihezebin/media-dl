@@ -21,7 +21,17 @@ function AppRoot() {
         token: {
           fontFamily: 'var(--app-font-family)',
           fontFamilyCode: 'var(--app-font-family)',
-          colorPrimary: themeDark ? '#5b9dff' : '#1677ff',
+          colorPrimary: themeDark ? '#b6a1ed' : '#7860c8',
+          colorInfo: themeDark ? '#b6a1ed' : '#7860c8',
+          colorTextBase: themeDark ? '#ffffff' : '#45414f',
+          colorText: themeDark ? '#e7e4ef' : '#45414f',
+          colorTextHeading: themeDark ? '#e7e4ef' : '#45414f',
+          colorTextSecondary: themeDark ? '#a19bad' : '#878491',
+          colorBorder: themeDark ? '#302b3c' : '#e9e5ef',
+          colorBgContainer: themeDark ? '#1d1a25' : '#ffffff',
+          colorBgElevated: themeDark ? '#1d1a25' : '#ffffff',
+          colorBgLayout: themeDark ? '#14121b' : '#f8f7fa',
+          borderRadius: 9,
         },
       }}>
       <LazyRouter />

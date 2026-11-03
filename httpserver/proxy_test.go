@@ -1,6 +1,9 @@
 package httpserver
 
 import (
+	"github.com/gin-gonic/gin"
+	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"testing"
 
@@ -71,5 +74,31 @@ func TestParseProxyTarget(t *testing.T) {
 		if _, err := parseProxyTarget(raw); err == nil {
 			t.Fatalf("parseProxyTarget(%q) unexpectedly succeeded", raw)
 		}
+	}
+}
+
+// Exercise the browser playback route against a local upstream proxy, without
+// depending on a provider's expiring URLs or a real account.
+func TestNeteaseProxyPreservesHeadersAndRange(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Host != "m1.music.126.net" || r.Header.Get("Range") != "bytes=2-5" || r.Header.Get("Referer") != "http://music.163.com/" || r.Header.Get("Origin") != "http://music.163.com" {
+			t.Error("Netease playback destination or headers lost")
+		}
+		w.Header().Set("Content-Type", "audio/mpeg")
+		w.Header().Set("Content-Range", "bytes 2-5/10")
+		w.Header().Set("Accept-Ranges", "bytes")
+		w.WriteHeader(http.StatusPartialContent)
+		_, _ = w.Write([]byte("2345"))
+	}))
+	defer upstream.Close()
+	server := &Server{config: Config{Proxy: upstream.URL}}
+	engine := gin.New()
+	engine.GET(proxyPath, server.proxy)
+	request := httptest.NewRequest("GET", proxyPath+"?url="+url.QueryEscape("http://m1.music.126.net/audio.mp3"), nil)
+	request.Header.Set("Range", "bytes=2-5")
+	response := httptest.NewRecorder()
+	engine.ServeHTTP(response, request)
+	if response.Code != http.StatusPartialContent || response.Body.String() != "2345" || response.Header().Get("Content-Range") != "bytes 2-5/10" || response.Header().Get("Accept-Ranges") != "bytes" {
+		t.Fatalf("playback response changed: %d %s", response.Code, response.Body.String())
 	}
 }

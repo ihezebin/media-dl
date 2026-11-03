@@ -1,5 +1,8 @@
 APP ?= media-dl
+.DEFAULT_GOAL := build
 PORT ?= 8080
+WEB_PORT ?= 3000
+AIR_VERSION := v1.61.7
 TAG ?= $(shell git describe --tags --always)
 # 腾讯云容器镜像服务：ccr.ccs.tencentyun.com；可通过 HEZEBIN_DOCKER_REGISTRY 覆盖
 HEZEBIN_DOCKER_REGISTRY ?= ccr.ccs.tencentyun.com
@@ -10,9 +13,12 @@ IMAGE ?= $(IMAGE_REPOSITORY):$(TAG)
 DOCKER_PLATFORM ?= linux/amd64
 DOCKER_USER ?= $(HEZEBIN_DOCKER_USER)
 DOCKER_PWD ?= $(HEZEBIN_DOCKER_PWD)
-export DOCKER_USER DOCKER_PWD
+export DOCKER_USER DOCKER_PWD AIR_VERSION
 
-.PHONY: build web-build server webui test package package-local login docker-build docker-up docker-down
+.PHONY: dev build web-build server webui test package package-local login docker-build docker-up docker-down
+
+dev:
+	@MEDIA_DL_PORT="$(PORT)" MEDIA_DL_WEB_PORT="$(WEB_PORT)" bash scripts/dev.sh
 
 build: web-build
 	CGO_ENABLED=0 go build -o bin/$(APP) .

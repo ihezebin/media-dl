@@ -148,6 +148,12 @@ func (s *Service) Download(client *httpx.Client, song *musicmodel.Song, opt Down
 		if strings.TrimSpace(audioURL) == "" {
 			return nil, fmt.Errorf("平台返回空下载地址")
 		}
+		if song.Extra["is_trial"] == "1" {
+			return nil, fmt.Errorf("该歌曲当前仅可试听，请登录有完整歌曲权限的酷狗账号后重新搜索")
+		}
+		if resolvedExt := normalizeAudioExt(song.Ext); resolvedExt != "" {
+			audioPath = filepath.Join(opt.OutputDir, base+"."+resolvedExt)
+		}
 		fmt.Fprintf(os.Stderr, "下载音频 -> %s\n", audioPath)
 		if err := saveURL(client, audioURL, audioPath, song.Source, s.cookie); err != nil {
 			return nil, fmt.Errorf("下载音频失败: %w", err)

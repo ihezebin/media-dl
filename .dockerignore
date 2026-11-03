@@ -1,4 +1,5 @@
 .git
+.package
 .DS_Store
 .env
 .env.*
