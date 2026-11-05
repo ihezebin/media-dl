@@ -1,4 +1,4 @@
-package httpserver
+package cache
 
 import (
 	"crypto/rand"
@@ -7,14 +7,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/gin-gonic/gin"
 	"github.com/wenlng/go-captcha-assets/resources/imagesv2"
 	"github.com/wenlng/go-captcha-assets/resources/tiles"
 	"github.com/wenlng/go-captcha/v2/base/option"
 	"github.com/wenlng/go-captcha/v2/rotate"
 	"github.com/wenlng/go-captcha/v2/slide"
-
-	olympus "github.com/ihezebin/olympus/httpserver"
 )
 
 const (
@@ -22,7 +19,7 @@ const (
 	behaviorCaptchaPadding = 5
 )
 
-type behaviorCaptchaStore struct {
+type BehaviorCaptchaStore struct {
 	mu         sync.Mutex
 	challenges map[string]behaviorCaptcha
 	tokens     map[string]time.Time
@@ -39,7 +36,7 @@ type behaviorCaptcha struct {
 	rotateDiff int
 }
 
-type behaviorCaptchaResponse struct {
+type BehaviorCaptchaResponse struct {
 	ID          string    `json:"id"`
 	Type        string    `json:"type"`
 	ExpiresAt   time.Time `json:"expires_at"`
@@ -53,7 +50,7 @@ type behaviorCaptchaResponse struct {
 	Angle       int       `json:"angle"`
 }
 
-type behaviorCaptchaVerifyRequest struct {
+type BehaviorCaptchaVerifyRequest struct {
 	ID    string `json:"id" openapi:"required"`
 	Type  string `json:"type" openapi:"required"`
 	X     int    `json:"x"`
@@ -61,13 +58,13 @@ type behaviorCaptchaVerifyRequest struct {
 	Angle int    `json:"angle"`
 }
 
-type behaviorCaptchaVerifyResponse struct {
+type BehaviorCaptchaVerifyResponse struct {
 	Verified  bool      `json:"verified"`
 	Token     string    `json:"token"`
 	ExpiresAt time.Time `json:"expires_at"`
 }
 
-func newBehaviorCaptchaStore() (*behaviorCaptchaStore, error) {
+func NewBehaviorCaptchaStore() (*BehaviorCaptchaStore, error) {
 	backgrounds, err := imagesv2.GetImages()
 	if err != nil {
 		return nil, fmt.Errorf("加载验证码背景失败: %w", err)
@@ -92,7 +89,7 @@ func newBehaviorCaptchaStore() (*behaviorCaptchaStore, error) {
 	rotateBuilder := rotate.NewBuilder(rotate.WithRangeAnglePos([]option.RangeVal{{Min: 20, Max: 330}}))
 	rotateBuilder.SetResources(rotate.WithImages(backgrounds))
 
-	return &behaviorCaptchaStore{
+	return &BehaviorCaptchaStore{
 		challenges: make(map[string]behaviorCaptcha),
 		tokens:     make(map[string]time.Time),
 		slide:      slideBuilder.Make(),
@@ -101,14 +98,14 @@ func newBehaviorCaptchaStore() (*behaviorCaptchaStore, error) {
 	}, nil
 }
 
-func (s *behaviorCaptchaStore) generate() (*behaviorCaptchaResponse, error) {
+func (s *BehaviorCaptchaStore) Generate() (*BehaviorCaptchaResponse, error) {
 	kind, err := randomCaptchaKind()
 	if err != nil {
 		return nil, err
 	}
 	now := time.Now()
 	challenge := behaviorCaptcha{kind: kind, expiresAt: now.Add(behaviorCaptchaTTL)}
-	response := &behaviorCaptchaResponse{Type: kind, ExpiresAt: challenge.expiresAt}
+	response := &BehaviorCaptchaResponse{Type: kind, ExpiresAt: challenge.expiresAt}
 
 	switch kind {
 	case "slide", "drag":
@@ -172,7 +169,7 @@ func (s *behaviorCaptchaStore) generate() (*behaviorCaptchaResponse, error) {
 	return response, nil
 }
 
-func (s *behaviorCaptchaStore) verify(req behaviorCaptchaVerifyRequest) (string, time.Time, bool) {
+func (s *BehaviorCaptchaStore) Verify(req BehaviorCaptchaVerifyRequest) (string, time.Time, bool) {
 	now := time.Now()
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -203,7 +200,7 @@ func (s *behaviorCaptchaStore) verify(req behaviorCaptchaVerifyRequest) (string,
 	return token, expiresAt, true
 }
 
-func (s *behaviorCaptchaStore) validToken(token string) bool {
+func (s *BehaviorCaptchaStore) ValidToken(token string) bool {
 	if token == "" {
 		return false
 	}
@@ -215,7 +212,7 @@ func (s *behaviorCaptchaStore) validToken(token string) bool {
 	return ok && now.Before(expiresAt)
 }
 
-func (s *behaviorCaptchaStore) cleanupLocked(now time.Time) {
+func (s *BehaviorCaptchaStore) cleanupLocked(now time.Time) {
 	for id, challenge := range s.challenges {
 		if !now.Before(challenge.expiresAt) {
 			delete(s.challenges, id)
@@ -242,24 +239,4 @@ func randomCaptchaID() (string, error) {
 		return "", fmt.Errorf("生成验证码标识失败: %w", err)
 	}
 	return hex.EncodeToString(value), nil
-}
-
-func (s *Server) captcha(c *gin.Context, _ olympus.EmptyType) (*behaviorCaptchaResponse, error) {
-	return s.captchaStore.generate()
-}
-
-func (s *Server) captchaVerify(_ *gin.Context, req behaviorCaptchaVerifyRequest) (*behaviorCaptchaVerifyResponse, error) {
-	token, expiresAt, ok := s.captchaStore.verify(req)
-	if !ok {
-		return nil, badRequest(fmt.Errorf("验证码校验失败，请重新操作"))
-	}
-	return &behaviorCaptchaVerifyResponse{Verified: true, Token: token, ExpiresAt: expiresAt}, nil
-}
-
-func (s *Server) requireCaptcha(c *gin.Context) error {
-	token := c.GetHeader("X-Captcha-Token")
-	if s.captchaStore.validToken(token) {
-		return nil
-	}
-	return olympus.NewError(olympus.CodeUnauthorized, "验证码已失效，请先完成验证")
 }

@@ -44,7 +44,7 @@ CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -o ./dist/media-dl-linux-arm64 .
 go run . server --port 8080 --web-dir ./webui/dist
 ```
 
-服务启动后，Web UI 地址为 `http://127.0.0.1:8080/`，接口文档为 `http://127.0.0.1:8080/openapi`。完整接口、请求体、响应体和环境变量说明见 [HTTP API 文档](./httpserver/README.md)。
+服务启动后，Web UI 地址为 `http://127.0.0.1:8080/`，接口文档为 `http://127.0.0.1:8080/openapi`。完整接口、请求体、响应体和环境变量说明见 [HTTP API 文档](./server/README.md)。
 
 如果只需要提供 HTTP API、不需要启动 Web UI，可使用 `--api-only`：
 
@@ -182,7 +182,9 @@ internal/
     downloader/           视频文件下载和 ffmpeg 合并
   httpx/                  视频和音乐共用的 HTTP、Cookie、代理能力
   util/                   视频和音乐共用的文件名等工具
-httpserver/               HTTP API、文件服务和 webui 托管
+server/                   HTTP 主机、路由和 webui 托管
+application/              业务服务与请求 DTO
+component/                人机验证及外部客户端
 webui/                    Vite + React 前端
 ```
 
@@ -677,3 +679,14 @@ Chrome 已登录酷狗时，酷狗搜索和下载可以直接使用完整 Cookie
 ## License
 
 MIT
+
+
+### 开发启动顺序与镜像构建
+
+`make dev` 先启动后端，等待配置端口开始监听后再启动 WebUI；后端提前退出或超时不会启动前端。`DEV_STARTUP_TIMEOUT` 可设置等待秒数（默认 120）。Ctrl+C 或任一服务退出会清理本次启动的进程，不接管已有服务。
+
+`make package` / `make package-local` 先在本机构建前端和 Linux 后端，复用本地依赖及 Go 缓存；Dockerfile 仅复制应用产物并准备运行环境，不在 Docker 中下载应用依赖或编译。
+
+### 服务日志
+
+`media-dl server --service-name media-dl`（环境变量 `MEDIA_DL_SERVICE_NAME`）配置 `service_name`，默认 `media-dl`。服务启动后统一使用 Zap 输出到 `log/<service_name>.log`，包含请求访问日志、trace ID、caller 和时间戳；单文件约 50 MB、备份最多 7 天/3 份、gzip 压缩。部署挂载 `/root/hezebin/log:/app/log`，不建项目子目录。

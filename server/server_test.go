@@ -1,4 +1,4 @@
-package httpserver
+package server
 
 import (
 	"bytes"
@@ -6,67 +6,24 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"net/url"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/gin-gonic/gin/binding"
-
-	"github.com/hezebin/media-dl/internal/httpx"
+	"github.com/hezebin/media-dl/application/dto"
+	"github.com/hezebin/media-dl/component/cache"
 	"github.com/hezebin/media-dl/internal/music"
 )
-
-func TestApplyCookieHeader(t *testing.T) {
-	client, err := httpx.New(httpx.Options{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	applyCookieHeader(client, "UIFID=uifid-test; ttwid=ttwid-test")
-	for _, rawURL := range []string{"https://www.douyin.com/video/1", "https://www.youtube.com/watch?v=test"} {
-		u, err := url.Parse(rawURL)
-		if err != nil {
-			t.Fatal(err)
-		}
-		cookies := client.HTTP().Jar.Cookies(u)
-		if len(cookies) != 2 {
-			t.Fatalf("cookies for %s = %d, want 2", rawURL, len(cookies))
-		}
-	}
-}
-
-func TestCookieHeaderFromTextForPlatformFiltersDomains(t *testing.T) {
-	raw := "# Netscape HTTP Cookie File\n" +
-		".kugou.com\tTRUE\t/\tFALSE\t0\tkg_mid\tkugou-value\n" +
-		".music.163.com\tTRUE\t/\tFALSE\t0\tMUSIC_U\tnetease-value\n" +
-		"atc.bmw-brilliance.cn\tFALSE\t/\tFALSE\t0\tSESSION\tunrelated\n"
-	got, err := cookieHeaderFromTextForPlatform(raw, "kugou")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got != "kg_mid=kugou-value" {
-		t.Fatalf("filtered cookie header = %q, want only Kugou cookie", got)
-	}
-}
-
-func TestCookieHeaderFromTextForPlatformKeepsPlainHeader(t *testing.T) {
-	got, err := cookieHeaderFromTextForPlatform("kg_mid=kugou-value; MUSIC_U=netease-value", "kugou")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got != "kg_mid=kugou-value; MUSIC_U=netease-value" {
-		t.Fatalf("plain cookie header = %q", got)
-	}
-}
 
 func TestVideoCookieIsNotOverwrittenByRequestHeader(t *testing.T) {
 	tests := []struct {
 		name    string
 		request any
 	}{
-		{name: "info", request: &videoInfoRequest{}},
-		{name: "download", request: &videoDownloadRequest{}},
+		{name: "info", request: &dto.VideoInfoRequest{}},
+		{name: "download", request: &dto.VideoDownloadRequest{}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -81,9 +38,9 @@ func TestVideoCookieIsNotOverwrittenByRequestHeader(t *testing.T) {
 			}
 			var got string
 			switch value := tt.request.(type) {
-			case *videoInfoRequest:
+			case *dto.VideoInfoRequest:
 				got = value.Cookie
-			case *videoDownloadRequest:
+			case *dto.VideoDownloadRequest:
 				got = value.Cookie
 			}
 			if got != "body-cookie" {
@@ -95,8 +52,8 @@ func TestVideoCookieIsNotOverwrittenByRequestHeader(t *testing.T) {
 
 func TestVideoRequestJSONRedactsCookie(t *testing.T) {
 	for _, request := range []any{
-		videoInfoRequest{URL: "https://example.com/video", Cookie: "secret-cookie"},
-		videoDownloadRequest{URL: "https://example.com/video", Cookie: "secret-cookie"},
+		dto.VideoInfoRequest{URL: "https://example.com/video", Cookie: "secret-cookie"},
+		dto.VideoDownloadRequest{URL: "https://example.com/video", Cookie: "secret-cookie"},
 	} {
 		encoded, err := json.Marshal(request)
 		if err != nil {
@@ -126,6 +83,12 @@ func TestServerRoutes(t *testing.T) {
 		path string
 		want int
 	}{
+		{name: "Stoplight", path: "/openapi", want: http.StatusOK},
+		{name: "Redoc", path: "/redoc", want: http.StatusOK},
+		{name: "RapiDoc", path: "/rapidoc", want: http.StatusOK},
+		{name: "Swagger", path: "/swagger", want: http.StatusOK},
+		{name: "metrics", path: "/metrics", want: http.StatusOK},
+		{name: "pprof", path: "/debug/pprof/", want: http.StatusOK},
 		{name: "music platforms", path: "/api/music/platforms", want: http.StatusOK},
 		{name: "captcha", path: "/api/captcha", want: http.StatusOK},
 		{name: "webui", path: "/", want: http.StatusOK},
@@ -173,9 +136,7 @@ func TestServerRoutes(t *testing.T) {
 	})
 	t.Run("verified search accepts only an issued header token", func(t *testing.T) {
 		token := "test-captcha-token"
-		server.captchaStore.mu.Lock()
-		server.captchaStore.tokens[token] = time.Now().Add(time.Minute)
-		server.captchaStore.mu.Unlock()
+		server.Router.Service.Captcha = tokenCaptcha{token: token}
 
 		req := httptest.NewRequest(http.MethodPost, "/api/music/search/verified", nil)
 		req.Header.Set("X-Captcha-Token", token)
@@ -222,3 +183,11 @@ func TestAPIRoutesDoNotRegisterWebUIOrCaptchaRoutes(t *testing.T) {
 		}
 	})
 }
+
+type tokenCaptcha struct{ token string }
+
+func (t tokenCaptcha) Generate() (*cache.BehaviorCaptchaResponse, error) { return nil, nil }
+func (t tokenCaptcha) Verify(cache.BehaviorCaptchaVerifyRequest) (string, time.Time, bool) {
+	return "", time.Time{}, false
+}
+func (t tokenCaptcha) ValidToken(v string) bool { return v == t.token }

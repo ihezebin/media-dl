@@ -1,0 +1,146 @@
+/* Error-page layout and colors mirror Doorway's Status page. Scoped to avoid changing business pages. */
+.doorway-status-page {
+  --status-ink: #45414f;
+  --status-muted: #878491;
+  --status-purple: #7860c8;
+  --status-border: #e9e5ef;
+  --status-surface: #fff;
+  --status-wash: #f8f7fa;
+  color: var(--status-ink);
+  background: radial-gradient(ellipse at 50% 35%, #b99cdb18, transparent 60%), var(--status-wash);
+  min-height: 100dvh;
+  width: 100%;
+  font-family: inherit;
+  font-size: 14px;
+  line-height: 1.5714285714;
+}
+html[theme='dark'] .doorway-status-page,
+html[data-theme='dark'] .doorway-status-page {
+  --status-ink: #e7e4ef;
+  --status-muted: #a19bad;
+  --status-purple: #b6a1ed;
+  --status-border: #302b3c;
+  --status-surface: #1d1a25;
+  --status-wash: #14121b;
+}
+.doorway-status-page * { box-sizing: border-box; }
+.doorway-status-page a { color: inherit; text-decoration: none; }
+.doorway-status-page .status-header {
+  height: auto;
+  min-height: 0;
+  position: static;
+  border: 0;
+  background: transparent;
+  max-width: 1320px;
+  padding: 29px 48px;
+  margin: auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.doorway-status-page .status-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 11px;
+  font-weight: 700;
+  font-size: 17px;
+  letter-spacing: 2px;
+}
+.doorway-status-page .status-brand img { width: 43px; height: 43px; object-fit: contain; }
+.doorway-status-page .status-brand-dot { color: var(--status-purple); }
+.doorway-status-page .status-appearance button {
+  border-radius: 50%;
+}
+.doorway-status-page > main { display: block; position: static; width: 100%; max-width: none; min-height: 0; margin: 0; text-align: center; padding: 30px 24px 60px; }
+.doorway-status-page .status-art {
+  position: relative;
+  height: 270px;
+  max-width: 500px;
+  margin: 0 auto 25px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.doorway-status-page .status-art strong {
+  font-size: 220px;
+  font-weight: 700;
+  color: #ac91d329;
+  letter-spacing: 10px;
+}
+.doorway-status-page .status-art img {
+  position: absolute;
+  width: 180px;
+  height: 180px;
+  object-fit: contain;
+  bottom: 0;
+  left: calc(50% - 90px);
+}
+.doorway-status-page .status-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  color: var(--status-purple);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 2.6px;
+}
+.doorway-status-page h1 { color: inherit; font-size: 26px; font-weight: 500; margin: 22px 0 13px; }
+.doorway-status-page p { color: var(--status-muted); font-size: 13px; line-height: 1.85; margin: 0 0 13px; }
+.doorway-status-page .status-actions { display: flex; align-items: center; justify-content: center; gap: 12px; margin-top: 30px; flex-wrap: wrap; }
+.doorway-status-page .status-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 36px;
+  padding: 0 16px;
+  gap: 6px;
+  font: inherit;
+  font-size: 13px;
+  line-height: 1;
+  border: 1px solid var(--status-border);
+  border-radius: 9px;
+  background: var(--status-surface);
+  color: var(--status-ink);
+  cursor: pointer;
+  transition: 0.2s;
+}
+.doorway-status-page .status-button svg { width: 14px; height: 14px; }
+.doorway-status-page .status-button:hover { transform: translateY(-2px); box-shadow: 0 7px 22px #7961ba20; }
+.doorway-status-page .status-button.primary { background: linear-gradient(120deg, #7e68c7, #6550ae); color: white; border-color: transparent; box-shadow: 0 5px 14px #7560ba20; }
+.doorway-status-page .status-button:disabled { cursor: wait; opacity: 0.65; }
+.doorway-status-page button:focus-visible,
+.doorway-status-page a:focus-visible { outline: 3px solid #a28cdd; outline-offset: 5px; }
+@media (max-width: 768px) {
+  .doorway-status-page .status-header { padding: 23px 24px; }
+  .doorway-status-page .status-art strong { font-size: 175px; }
+  .doorway-status-page h1 { font-size: 21px; }
+}
+@media (max-width: 480px) { .doorway-status-page .status-art { height: 240px; } }
+@media (prefers-reduced-motion: reduce) { .doorway-status-page * { transition: none !important; } }
+
+.doorway-status-page .status-appearance > button { width: 38px; height: 38px; padding: 0; border: 1px solid var(--status-border); background: transparent; color: var(--status-ink); display: flex; align-items: center; justify-content: center; }
+.doorway-status-page .status-mobile-home,
+.doorway-status-page .status-mobile-title,
+.doorway-status-page .status-copy-mobile { display: none; }
+@media (max-width: 1024px), (pointer: coarse) and (max-width: 1440px) {
+  .doorway-status-page { background: var(--status-wash); padding-bottom: env(safe-area-inset-bottom); overflow-wrap: anywhere; }
+  .doorway-status-page .status-header { position: sticky; top: 0; z-index: 100; min-height: 60px; padding: 10px 16px; padding-top: max(10px, env(safe-area-inset-top)); background: var(--status-surface); border-bottom: 1px solid var(--status-border); gap: 12px; }
+  .doorway-status-page .status-brand { display: none; }
+  .doorway-status-page .status-mobile-home { width: 36px; height: 36px; display: grid; place-items: center; border-radius: 12px; background: var(--status-wash); color: var(--status-purple); }
+  .doorway-status-page .status-mobile-home svg { width: 14px; height: 14px; }
+  .doorway-status-page .status-mobile-title { display: block; flex: 1; font-size: 15px; }
+  .doorway-status-page .status-appearance > button { width: 36px; height: 36px; }
+  .doorway-status-page > main { max-width: 960px; margin: auto; padding: 12vh 16px 32px; }
+  .doorway-status-page .status-art { height: auto; max-width: none; margin: 0; flex-direction: column-reverse; }
+  .doorway-status-page .status-art img { position: static; width: 100px; height: 100px; display: block; margin: 0 auto; }
+  .doorway-status-page .status-art strong { display: block; font-size: 76px; color: var(--status-purple); font-weight: 500; letter-spacing: normal; }
+  .doorway-status-page .status-eyebrow,
+  .doorway-status-page .status-copy-desktop { display: none; }
+  .doorway-status-page .status-copy-mobile { display: inline; }
+  .doorway-status-page h1 { font-size: 26px; line-height: 1.35; margin: 12px 0; }
+  .doorway-status-page p { font-size: 14px; line-height: 1.7; margin: 0 0 14px; }
+  .doorway-status-page .status-actions { gap: 8px; margin-top: 18px; }
+  .doorway-status-page .status-actions > .status-button { flex: 1; height: 40px; padding: 0 12px; gap: 6px; font-size: 13px; line-height: 1; }
+}
+@media (min-width: 640px) and (max-width: 1024px) { .doorway-status-page > main { padding: 28px 28px 40px; } }
+@media (max-width: 360px) { .doorway-status-page > main { padding-inline: 12px; } }

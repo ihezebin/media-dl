@@ -1,4 +1,4 @@
-package httpserver
+package cache
 
 import (
 	"testing"
@@ -6,7 +6,7 @@ import (
 )
 
 func TestBehaviorCaptchaStoreVerify(t *testing.T) {
-	store := &behaviorCaptchaStore{
+	store := &BehaviorCaptchaStore{
 		challenges: map[string]behaviorCaptcha{
 			"slide":  {kind: "slide", expiresAt: time.Now().Add(time.Minute), targetX: 120, targetY: 80},
 			"rotate": {kind: "rotate", expiresAt: time.Now().Add(time.Minute), rotateDiff: 90},
@@ -14,36 +14,36 @@ func TestBehaviorCaptchaStoreVerify(t *testing.T) {
 		tokens: make(map[string]time.Time),
 	}
 
-	if _, _, ok := store.verify(behaviorCaptchaVerifyRequest{ID: "slide", Type: "slide", X: 1, Y: 1}); ok {
+	if _, _, ok := store.Verify(BehaviorCaptchaVerifyRequest{ID: "slide", Type: "slide", X: 1, Y: 1}); ok {
 		t.Fatal("an incorrect slide position was accepted")
 	}
-	token, expiresAt, ok := store.verify(behaviorCaptchaVerifyRequest{ID: "slide", Type: "slide", X: 120, Y: 80})
+	token, expiresAt, ok := store.Verify(BehaviorCaptchaVerifyRequest{ID: "slide", Type: "slide", X: 120, Y: 80})
 	if !ok || token == "" || !expiresAt.After(time.Now()) {
 		t.Fatalf("valid slide position was rejected: token=%q expires=%v", token, expiresAt)
 	}
-	if !store.validToken(token) {
+	if !store.ValidToken(token) {
 		t.Fatal("issued captcha token is not valid")
 	}
-	if _, _, ok := store.verify(behaviorCaptchaVerifyRequest{ID: "slide", Type: "slide", X: 120, Y: 80}); ok {
+	if _, _, ok := store.Verify(BehaviorCaptchaVerifyRequest{ID: "slide", Type: "slide", X: 120, Y: 80}); ok {
 		t.Fatal("a challenge was accepted more than once")
 	}
 
-	if _, _, ok := store.verify(behaviorCaptchaVerifyRequest{ID: "rotate", Type: "rotate", Angle: 0}); ok {
+	if _, _, ok := store.Verify(BehaviorCaptchaVerifyRequest{ID: "rotate", Type: "rotate", Angle: 0}); ok {
 		t.Fatal("initial rotate angle was accepted")
 	}
-	if _, _, ok := store.verify(behaviorCaptchaVerifyRequest{ID: "rotate", Type: "rotate", Angle: 360 - 90}); !ok {
+	if _, _, ok := store.Verify(BehaviorCaptchaVerifyRequest{ID: "rotate", Type: "rotate", Angle: 360 - 90}); !ok {
 		t.Fatal("valid rotate angle was rejected")
 	}
 }
 
 func TestBehaviorCaptchaStoreGenerate(t *testing.T) {
-	store, err := newBehaviorCaptchaStore()
+	store, err := NewBehaviorCaptchaStore()
 	if err != nil {
 		t.Fatal(err)
 	}
 	seen := make(map[string]bool)
 	for i := 0; i < 24; i++ {
-		challenge, err := store.generate()
+		challenge, err := store.Generate()
 		if err != nil {
 			t.Fatal(err)
 		}

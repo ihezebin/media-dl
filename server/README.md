@@ -1,6 +1,6 @@
 # media-dl HTTP API
 
-`httpserver` 提供 media-dl 的 HTTP API 和 `webui` 静态文件服务。服务端使用 [olympus/httpserver](https://github.com/ihezebin/olympus) 注册路由、生成 OpenAPI 文档并统一处理请求响应。
+`server` 提供 media-dl 的 HTTP API 和 `webui` 静态文件服务。服务端使用 [olympus/httpserver](https://github.com/ihezebin/olympus) 注册路由、生成 OpenAPI 文档并统一处理请求响应。
 
 ## 启动
 

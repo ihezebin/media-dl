@@ -3,14 +3,19 @@ module github.com/hezebin/media-dl
 go 1.25.10
 
 require (
-	github.com/gin-gonic/gin v1.10.0
 	github.com/dop251/goja v0.0.0-20260915173639-b3fa02110dbd
+	github.com/gin-gonic/gin v1.10.0
 	github.com/guohuiyuan/music-lib v1.1.1-0.20260828151741-02402db9ef9d
 	github.com/ihezebin/olympus v1.0.29
 	github.com/spf13/cobra v1.8.1
 	github.com/tjfoc/gmsm v1.4.1
 	github.com/wenlng/go-captcha-assets v1.0.7
 	github.com/wenlng/go-captcha/v2 v2.0.5
+)
+
+require (
+	google.golang.org/genproto/googleapis/api v0.0.0-20250303144028-a0af3efb3deb // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20250227231956-55c901821b1e // indirect
 )
 
 require (
@@ -37,7 +42,7 @@ require (
 	github.com/google/pprof v0.0.0-20230207041349-798e818bf904 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/ihezebin/openapi v1.0.7 // indirect
-	github.com/ihezebin/rotatelog v1.0.3 // indirect
+	github.com/ihezebin/rotatelog v1.0.3
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/josharian/intern v1.0.0 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect

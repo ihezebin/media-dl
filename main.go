@@ -7,17 +7,24 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
+
+	"github.com/hezebin/media-dl/config"
+	"github.com/ihezebin/olympus/logger"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/trace"
 
 	"github.com/spf13/cobra"
 
-	apihttp "github.com/hezebin/media-dl/httpserver"
 	"github.com/hezebin/media-dl/internal/httpx"
 	"github.com/hezebin/media-dl/internal/music"
 	"github.com/hezebin/media-dl/internal/video/downloader"
 	"github.com/hezebin/media-dl/internal/video/extractor"
 	"github.com/hezebin/media-dl/internal/video/model"
+	apihttp "github.com/hezebin/media-dl/server"
 
 	_ "github.com/hezebin/media-dl/internal/video/extractor/bilibili"
 	_ "github.com/hezebin/media-dl/internal/video/extractor/douyin"
@@ -91,6 +98,7 @@ func newRootCommand() *cobra.Command {
 
 func newServerCommand() *cobra.Command {
 	var port uint
+	var serviceName = envOrDefault("MEDIA_DL_SERVICE_NAME", "media-dl")
 	var webDir = envOrDefault("MEDIA_DL_WEB_DIR", "./webui/dist")
 	var apiOnly = envBool("MEDIA_DL_API_ONLY", false)
 	serverCmd := &cobra.Command{
@@ -98,20 +106,34 @@ func newServerCommand() *cobra.Command {
 		Short: "启动 HTTP API 和 webui 服务（可选仅启动 API）",
 		Args:  cobra.NoArgs,
 		RunE: func(_ *cobra.Command, _ []string) error {
-			server, err := apihttp.New(context.Background(), apihttp.Config{
+			cfg := apihttp.Config{
+				ServiceName: serviceName,
 				Port:        port,
 				Proxy:       flagProxy,
 				Cookie:      flagCookie,
 				CookiesFile: flagCookies,
 				WebDir:      webDir,
 				APIOnly:     apiOnly,
-			})
+			}
+			pwd, err := os.Getwd()
+			if err != nil {
+				return err
+			}
+			cfg.Pwd = pwd
+			if err := cfg.NormalizeLogging(); err != nil {
+				return err
+			}
+			if err := initComponents(context.Background(), &cfg); err != nil {
+				return err
+			}
+			server, err := apihttp.New(context.Background(), cfg)
 			if err != nil {
 				return err
 			}
 			return server.Run(context.Background())
 		},
 	}
+	serverCmd.Flags().StringVar(&serviceName, "service-name", serviceName, "service_name，用于日志文件名")
 	serverCmd.Flags().UintVarP(&port, "port", "P", envUint("MEDIA_DL_PORT", 8080), "HTTP 服务端口")
 	serverCmd.Flags().StringVar(&webDir, "web-dir", webDir, "webui 构建目录")
 	serverCmd.Flags().BoolVar(&apiOnly, "api-only", apiOnly, "仅启动 HTTP API，不注册 WebUI 和验证码相关接口")
@@ -426,4 +448,39 @@ func printInfoBrief(info *model.VideoInfo) {
 	if info.VideoURL != "" {
 		fmt.Fprintf(os.Stderr, "视频: %s\n", info.VideoURL)
 	}
+}
+
+func initComponents(ctx context.Context, conf *config.Config) error {
+	// init logger
+	if conf.Logger != nil {
+		logger.DefaultGetTraceIdFunc = func(ctx context.Context) string {
+			spanCtx := trace.SpanContextFromContext(ctx)
+			if spanCtx.IsValid() {
+				return spanCtx.TraceID().String()
+			}
+			// 生成新的 trace_id
+			tr := otel.Tracer(conf.ServiceName)
+			ctx, span := tr.Start(ctx, "generate-new-trace-id")
+			defer span.End()
+			traceID := span.SpanContext().TraceID().String()
+			return traceID
+		}
+		logger.ResetLoggerWithOptions(
+			logger.WithLoggerType(logger.LoggerTypeZap),
+			logger.WithServiceName(conf.ServiceName),
+			logger.WithCaller(),
+			logger.WithTimestamp(),
+			// logger.WithOtlpEnabled(true),
+			logger.WithLevel(conf.Logger.Level),
+			//logger.WithLocalFsHook(filepath.Join(conf.Pwd, conf.Logger.Filename)),
+			logger.WithRotate(logger.RotateConfig{
+				Path:               filepath.Join(conf.Pwd, conf.Logger.Filename),
+				MaxSizeKB:          1024 * 50,          // 单个文件超过约 50MB 就轮转：旧文件改名备份，再新建同名文件继续写
+				MaxAge:             time.Hour * 24 * 7, // 备份日志最多保留 7 天，超时删除
+				MaxRetainFileCount: 3,                  // 最多保留 3 个备份（不含当前正在写的那个）
+				Compress:           true,               // 轮转后的备份用 gzip 压缩（通常变成 .gz）
+			}),
+		)
+	}
+	return nil
 }

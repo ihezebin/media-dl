@@ -1,4 +1,4 @@
-package httpserver
+package router
 
 import (
 	"fmt"
@@ -8,26 +8,11 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
-	musicmodel "github.com/guohuiyuan/music-lib/model"
 )
 
 const proxyPath = "/api/proxy"
-const legacyProxyPath = "/proxy"
 
-func unproxyURL(raw string) string {
-	raw = strings.TrimSpace(raw)
-	if raw == "" {
-		return raw
-	}
-	target, err := url.Parse(raw)
-	if err != nil || (target.Path != proxyPath && target.Path != legacyProxyPath) {
-		return raw
-	}
-	if original := strings.TrimSpace(target.Query().Get("url")); original != "" {
-		return original
-	}
-	return raw
-}
+const legacyProxyPath = "/proxy"
 
 func isHTTPURL(target *url.URL) bool {
 	if target == nil || target.Host == "" || target.User != nil {
@@ -55,14 +40,14 @@ func isPrivateProxyIP(ip net.IP) bool {
 	return ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() || ip.IsUnspecified()
 }
 
-func (s *Server) proxy(c *gin.Context) {
+func (s *Router) proxy(c *gin.Context) {
 	target, err := parseProxyTarget(c.Query("url"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"code": http.StatusBadRequest, "message": err.Error()})
 		return
 	}
 
-	client, err := s.clientWithContext(c.Request.Context())
+	client, err := s.Service.ClientWithContext(c.Request.Context())
 	if err != nil {
 		c.JSON(http.StatusBadGateway, gin.H{"code": http.StatusBadGateway, "message": err.Error()})
 		return
@@ -145,22 +130,6 @@ func defaultMusicProxyHeaders(target *url.URL) map[string]string {
 		}
 	}
 	return nil
-}
-
-func unproxyMusicSong(song *musicmodel.Song) {
-	transformMusicSong(song, unproxyURL)
-}
-
-func transformMusicSong(song *musicmodel.Song, transform func(string) string) {
-	if song == nil {
-		return
-	}
-	song.URL = transform(song.URL)
-	song.Cover = transform(song.Cover)
-	song.Link = transform(song.Link)
-	for key, value := range song.Extra {
-		song.Extra[key] = transform(value)
-	}
 }
 
 func isProxyHeaderValue(name, value string) bool {

@@ -7,6 +7,7 @@ import { Drawer, Input, message, Select, Slider, Spin, Tooltip } from 'antd'
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { CSSProperties } from 'react'
 
+import { LOCAL_STORAGE_KEYS } from '../../constants/storage'
 import { downloadMusicAsset, forgetBehaviorCaptcha, getMusicLyrics, getMusicPlatforms, isCaptchaRequired, parseCookieFile, proxyURL, resolveMusicSong, searchMusic, triggerFileDownload, type MusicSong } from '../../api/media'
 import { playableDuration, playbackSeek } from '../../api/playbackTime'
 import { isTrialSong, needsKugouVerification, songAccessTags } from '../../api/songAccess'
@@ -15,7 +16,6 @@ import { useBehaviorCaptcha } from '../../components/BehaviorCaptcha/useBehavior
 import styles from './index.module.scss'
 
 const defaultPlatforms = ['netease', 'qq', 'kugou', 'kuwo', 'migu', 'fivesing', 'qianqian', 'soda', 'jamendo', 'joox', 'bilibili', 'apple']
-const cookieStorageKey = 'media-dl.music.platform-cookies'
 const platformLabels: Record<string, string> = { netease: '网易云', qq: 'QQ音乐', kugou: '酷狗', kuwo: '酷我', migu: '咪咕', fivesing: '5sing', qianqian: '千千', soda: '汽水', jamendo: 'Jamendo', joox: 'JOOX', bilibili: 'Bilibili', apple: 'Apple' }
 const platformColors: Record<string, string> = { netease: '#e43f4f', qq: '#22c875', kugou: '#2f7df6', kuwo: '#5967d8', migu: '#11b8d1', fivesing: '#ef5c98', qianqian: '#3b82f6', soda: '#f59e0b', jamendo: '#2fa85f', joox: '#f06a35', bilibili: '#00aeec', apple: '#5f6675' }
 const searchTypeMeta = [
@@ -189,7 +189,7 @@ function Player({ song, playing, currentTime, duration, lyrics, lyricLoading, vo
 function readStoredPlatformCookies() {
   if (typeof window === 'undefined') return {}
   try {
-    const stored = JSON.parse(window.localStorage.getItem(cookieStorageKey) || '{}') as unknown
+    const stored = JSON.parse(window.localStorage.getItem(LOCAL_STORAGE_KEYS.musicCookies) || '{}') as unknown
     if (!stored || typeof stored !== 'object' || Array.isArray(stored)) return {}
     return Object.fromEntries(Object.entries(stored).filter(([, value]) => typeof value === 'string' && value.trim()))
   } catch {
@@ -200,7 +200,7 @@ function readStoredPlatformCookies() {
 function readStoredCookieFileNames() {
   if (typeof window === 'undefined') return {}
   try {
-    const stored = JSON.parse(window.localStorage.getItem(`${cookieStorageKey}.files`) || '{}') as unknown
+    const stored = JSON.parse(window.localStorage.getItem(LOCAL_STORAGE_KEYS.musicCookiesFiles) || '{}') as unknown
     if (!stored || typeof stored !== 'object' || Array.isArray(stored)) return {}
     return Object.fromEntries(Object.entries(stored).filter(([, value]) => typeof value === 'string' && value.trim()))
   } catch { return {} }
@@ -209,7 +209,7 @@ function readStoredCookieFileNames() {
 function readStoredCookieFiles() {
   if (typeof window === 'undefined') return {}
   try {
-    const stored = JSON.parse(window.localStorage.getItem(`${cookieStorageKey}.file-values`) || '{}') as unknown
+    const stored = JSON.parse(window.localStorage.getItem(LOCAL_STORAGE_KEYS.musicCookiesFileValues) || '{}') as unknown
     if (!stored || typeof stored !== 'object' || Array.isArray(stored)) return {}
     return Object.fromEntries(Object.entries(stored).filter(([, value]) => typeof value === 'string' && value.trim()))
   } catch { return {} }
@@ -252,7 +252,7 @@ export default function MusicSearch() {
   const [duration, setDuration] = useState(0)
   const [lyrics, setLyrics] = useState<LyricLine[]>([])
   const [lyricLoading, setLyricLoading] = useState(false)
-  const [volume, setVolume] = useState(() => readStoredNumber('media-dl.player.volume', 1, 0, 1))
+  const [volume, setVolume] = useState(() => readStoredNumber(LOCAL_STORAGE_KEYS.playerVolume, 1, 0, 1))
   const [muted, setMuted] = useState(false)
   const [playbackRate, setPlaybackRate] = useState(1)
   const audioRef = useRef<HTMLAudioElement | null>(null)
@@ -305,7 +305,7 @@ export default function MusicSearch() {
       audio.playbackRate = playbackRate
     }
     try {
-      window.localStorage.setItem('media-dl.player.volume', String(volume))
+      window.localStorage.setItem(LOCAL_STORAGE_KEYS.playerVolume, String(volume))
     } catch {
       // 播放控制仍然有效，只是不保存偏好
     }
@@ -434,9 +434,9 @@ export default function MusicSearch() {
     }))
     setPlatformCookies(next); setPlatformCookieFiles(files); setCookieFileNames(nextNames)
     try {
-      window.localStorage.setItem(cookieStorageKey, JSON.stringify(next))
-      window.localStorage.setItem(`${cookieStorageKey}.files`, JSON.stringify(nextNames))
-      window.localStorage.setItem(`${cookieStorageKey}.file-values`, JSON.stringify(files))
+      window.localStorage.setItem(LOCAL_STORAGE_KEYS.musicCookies, JSON.stringify(next))
+      window.localStorage.setItem(LOCAL_STORAGE_KEYS.musicCookiesFiles, JSON.stringify(nextNames))
+      window.localStorage.setItem(LOCAL_STORAGE_KEYS.musicCookiesFileValues, JSON.stringify(files))
     } catch { message.warning('Cookie 已应用，但写入 localStorage 失败') }
     setCookieDrawerOpen(false); message.success(`已保存 ${Object.keys(next).length} 个平台 Cookie`)
   }

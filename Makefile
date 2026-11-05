@@ -37,7 +37,7 @@ webui:
 	cd webui && yarn dev
 
 test:
-	go test . ./httpserver ./internal/...
+	go test ./...
 	cd webui && yarn lint && yarn build
 
 package: package-local

@@ -2,6 +2,7 @@ import { CheckCircleFilled, CloudDownloadOutlined, ExclamationCircleFilled, File
 import { Drawer, Input, message, Select, Spin } from 'antd'
 import { useEffect, useRef, useState } from 'react'
 
+import { LOCAL_STORAGE_KEYS } from '../../constants/storage'
 import { downloadVideo, forgetBehaviorCaptcha, getVideoInfo, isCaptchaRequired, parseCookieFile, proxyURL, triggerFileDownload, type VideoInfo } from '../../api/media'
 import { useBehaviorCaptcha } from '../../components/BehaviorCaptcha/useBehaviorCaptcha'
 
@@ -20,7 +21,6 @@ const platforms = [
 
 const videoPlatformKeys = ['youtube', 'tiktok', 'bilibili', 'douyin', 'kuaishou', 'xiaohongshu', 'weibo', 'youku', 'iqiyi', 'xigua', 'tencent', 'baidu', 'twitter', 'douyu', 'huya']
 const videoPlatformLabels: Record<string, string> = { youtube: 'YouTube', tiktok: 'TikTok', bilibili: 'Bilibili', douyin: '抖音', kuaishou: '快手', xiaohongshu: '小红书', weibo: '微博', youku: '优酷', iqiyi: '爱奇艺', xigua: '西瓜视频', tencent: '腾讯视频', baidu: '百度视频', twitter: 'X / Twitter', douyu: '斗鱼', huya: '虎牙' }
-const videoCookieStorageKey = 'media-dl.video-platform-cookies'
 
 function readStoredMap(key: string) {
   if (typeof window === 'undefined') return {}
@@ -56,12 +56,12 @@ export default function VideoDownload() {
   const [previewError, setPreviewError] = useState(false)
   const [parseError, setParseError] = useState('')
   const [result, setResult] = useState<VideoInfo | null>(null)
-  const [videoCookies, setVideoCookies] = useState<Record<string, string>>(() => readStoredMap(videoCookieStorageKey))
-  const [videoCookieFiles, setVideoCookieFiles] = useState<Record<string, string>>(() => readStoredMap(`${videoCookieStorageKey}.file-values`))
+  const [videoCookies, setVideoCookies] = useState<Record<string, string>>(() => readStoredMap(LOCAL_STORAGE_KEYS.videoCookies))
+  const [videoCookieFiles, setVideoCookieFiles] = useState<Record<string, string>>(() => readStoredMap(LOCAL_STORAGE_KEYS.videoCookiesFileValues))
   const [cookieDraft, setCookieDraft] = useState('')
   const [cookieDrafts, setCookieDrafts] = useState<Record<string, string>>({})
   const [cookieDrawerOpen, setCookieDrawerOpen] = useState(false)
-  const [cookieFileNames, setCookieFileNames] = useState<Record<string, string>>(() => readStoredMap(`${videoCookieStorageKey}.files`))
+  const [cookieFileNames, setCookieFileNames] = useState<Record<string, string>>(() => readStoredMap(LOCAL_STORAGE_KEYS.videoCookiesFiles))
   const [cookiePlatform, setCookiePlatform] = useState('')
   const [cookieDraftFileName, setCookieDraftFileName] = useState('')
   const [cookieDraftFileContent, setCookieDraftFileContent] = useState('')
@@ -158,7 +158,7 @@ export default function VideoDownload() {
     const nextFiles = Object.fromEntries(Object.entries(videoCookieFiles).filter(([platform, value]) => nextCookies[platform] && value.trim())) as Record<string, string>
     const nextNames = Object.fromEntries(Object.entries(cookieFileNames).filter(([platform]) => nextCookies[platform])) as Record<string, string>
     setVideoCookies(nextCookies); setVideoCookieFiles(nextFiles); setCookieFileNames(nextNames)
-    try { window.localStorage.setItem(videoCookieStorageKey, JSON.stringify(nextCookies)); window.localStorage.setItem(`${videoCookieStorageKey}.file-values`, JSON.stringify(nextFiles)); window.localStorage.setItem(`${videoCookieStorageKey}.files`, JSON.stringify(nextNames)) } catch { message.warning('Cookie 已应用，但写入 localStorage 失败') }
+    try { window.localStorage.setItem(LOCAL_STORAGE_KEYS.videoCookies, JSON.stringify(nextCookies)); window.localStorage.setItem(LOCAL_STORAGE_KEYS.videoCookiesFileValues, JSON.stringify(nextFiles)); window.localStorage.setItem(LOCAL_STORAGE_KEYS.videoCookiesFiles, JSON.stringify(nextNames)) } catch { message.warning('Cookie 已应用，但写入 localStorage 失败') }
     setCookieDrawerOpen(false); message.success(`已保存 ${Object.keys(nextCookies).length} 个平台 Cookie`)
   }
 

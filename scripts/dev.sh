@@ -17,6 +17,7 @@ mkdir -p .package/dev
 echo "WebUI: http://127.0.0.1:$MEDIA_DL_WEB_PORT (Vite HMR)"
 echo "API:   http://127.0.0.1:$MEDIA_DL_PORT (Air hot reload)"
 # Separate process groups let cleanup stop Air's server and Vite's children too.
+node scripts/dev-ready.mjs check "$MEDIA_DL_PORT"
 set -m
 pids=()
 cleanup() {
@@ -30,6 +31,7 @@ trap cleanup EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
 "$air_bin" -c .air.toml & pids+=("$!")
+node scripts/dev-ready.mjs wait "$MEDIA_DL_PORT" "${pids[0]}"
 (cd webui && exec yarn dev) & pids+=("$!")
 while kill -0 "${pids[0]}" 2>/dev/null && kill -0 "${pids[1]}" 2>/dev/null; do
   sleep 1
