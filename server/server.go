@@ -11,7 +11,6 @@ import (
 	"go.opentelemetry.io/otel"
 
 	"github.com/gin-gonic/gin"
-	"github.com/hezebin/media-dl/application/service"
 	"github.com/hezebin/media-dl/component/cache"
 	"github.com/hezebin/media-dl/config"
 	"github.com/hezebin/media-dl/internal/music"
@@ -66,8 +65,6 @@ func New(ctx context.Context, conf Config) (*Server, error) {
 			middleware.Recovery(),
 			lm.Cors(),
 			metricRequestCounter,
-			middleware.LoggingRequestWithoutHeader(),
-			middleware.LoggingResponseWithoutHeader(),
 		),
 		// httpserver.WithLogProcessor(logExporter),
 		// httpserver.WithTraceExporter(traceExporter),
@@ -94,9 +91,10 @@ func New(ctx context.Context, conf Config) (*Server, error) {
 		return nil, errors.Wrap(err, "new server err")
 	}
 
-	routes := router.New(server.Engine(), conf, webDir, service.New(conf, captchaStore))
-	result := &Server{app: server, Router: routes}
-	server.RegisterRoutes(routes)
+	routes := router.New(server.Engine(), conf, webDir, captchaStore)
+	musicRouter := router.NewMusicRouter(conf, captchaStore)
+	result := &Server{app: server, Router: routes, Music: musicRouter}
+	server.RegisterRoutes(musicRouter, router.NewVideoRouter(conf, captchaStore), router.NewCaptchaRouter(conf, captchaStore))
 	err = server.RegisterOpenAPIUI("/openapi", httpserver.StoplightUI)
 	if err != nil {
 		return nil, errors.Wrap(err, "register openapi ui err")
@@ -117,4 +115,5 @@ type Config = config.Config
 type Server struct {
 	app    appServer
 	Router *router.Router
+	Music  *router.MusicRouter
 }

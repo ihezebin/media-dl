@@ -7,11 +7,14 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/ihezebin/olympus/httpserver/middleware"
 )
 
 func (s *Router) RegisterFilesAndWeb() {
 	engine := s.Engine
-	engine.GET(proxyPath, s.proxy)
+	group := engine.Group("/api")
+	group.Use(middleware.LoggingRequestWithoutHeader(), middleware.LoggingResponseWithoutHeader())
+	group.GET("/proxy", s.proxy)
 	if s.config.APIOnly {
 		return
 	}

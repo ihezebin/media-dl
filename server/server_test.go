@@ -136,7 +136,7 @@ func TestServerRoutes(t *testing.T) {
 	})
 	t.Run("verified search accepts only an issued header token", func(t *testing.T) {
 		token := "test-captcha-token"
-		server.Router.Service.Captcha = tokenCaptcha{token: token}
+		server.Music.Service.Captcha = tokenCaptcha{token: token}
 
 		req := httptest.NewRequest(http.MethodPost, "/api/music/search/verified", nil)
 		req.Header.Set("X-Captcha-Token", token)
